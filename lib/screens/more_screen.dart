@@ -2,10 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../app_state.dart';
+import '../sync/sync_service.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import 'bills_screen.dart';
+import 'bug_report_screen.dart';
+import 'calendar_screen.dart';
+import 'debts_screen.dart';
+import 'export_screen.dart';
 import 'lock_screen.dart';
 import 'profile_screen.dart';
+import 'wrapped_screen.dart';
 
 /// Layar "Lainnya" (pengaturan) — cerminan modal #modalSettings di web.
 /// v1: TIDAK ADA item Backup GSheet (scope: tanpa sinkronisasi server).
@@ -89,27 +96,111 @@ class MoreScreen extends StatelessWidget {
                   MaterialPageRoute(builder: (_) => const ProfileScreen()),
                 ),
               ),
+              const SizedBox(height: 8),
+              SettingsItem(
+                icon: Icons.receipt_long_rounded,
+                iconColor: AppColors.orange,
+                label: state.t('bills_title'),
+                onTap: () => Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const BillsScreen())),
+              ),
+              const SizedBox(height: 8),
+              SettingsItem(
+                icon: Icons.handshake_rounded,
+                iconColor: AppColors.green,
+                label: state.t('debt_title'),
+                onTap: () => Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const DebtsScreen())),
+              ),
+              const SizedBox(height: 8),
+              SettingsItem(
+                icon: Icons.calendar_month_rounded,
+                iconColor: AppColors.blue,
+                label: state.t('calendar_title'),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const CalendarScreen()),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SettingsItem(
+                icon: Icons.auto_awesome_rounded,
+                iconColor: AppColors.purple,
+                label: state.t('wrap_title'),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const WrappedScreen()),
+                ),
+              ),
+              const SizedBox(height: 8),
+              // Status sinkronisasi cloud (Supabase) — offline-first.
+              ListenableBuilder(
+                listenable: state.sync,
+                builder: (ctx, _) {
+                  final sync = state.sync;
+                  final statusText = switch (sync.status) {
+                    SyncStatus.disabled => state.t('sync_disabled'),
+                    SyncStatus.idle => state.t('sync_synced'),
+                    SyncStatus.syncing => state.t('sync_syncing'),
+                    SyncStatus.synced => state.t('sync_synced'),
+                    SyncStatus.error => state.t('sync_error'),
+                  };
+                  final trailing = sync.pendingCount > 0
+                      ? state.t('sync_pending', {
+                          'n': sync.pendingCount.toString(),
+                        })
+                      : statusText;
+                  return SettingsItem(
+                    icon: Icons.cloud_rounded,
+                    iconColor: AppColors.purple,
+                    label: state.t('sync_title'),
+                    trailing: Text(
+                      trailing,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.muted,
+                      ),
+                    ),
+                    onTap: () {
+                      if (sync.status == SyncStatus.disabled) {
+                        showAppSnack(
+                          context,
+                          state.t('sync_disabled'),
+                          isError: true,
+                        );
+                      } else {
+                        sync.syncNow();
+                      }
+                    },
+                  );
+                },
+              ),
               const SizedBox(height: 20),
               Text(
                 state.t('export_backup_title'),
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                    ),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
               const SizedBox(height: 8),
               SettingsItem(
                 icon: Icons.picture_as_pdf_rounded,
                 iconColor: AppColors.black,
                 label: state.t('export_pdf'),
-                onTap: () => showComingSoon(context, state),
+                onTap: () => Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const ExportScreen())),
               ),
               const SizedBox(height: 8),
               SettingsItem(
                 icon: Icons.table_view_rounded,
                 iconColor: AppColors.green,
                 label: state.t('export_excel'),
-                onTap: () => showComingSoon(context, state),
+                onTap: () => Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const ExportScreen())),
               ),
               const SizedBox(height: 20),
               Container(
@@ -128,10 +219,10 @@ class MoreScreen extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       state.t('app_tagline'),
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(fontSize: 10, fontWeight: FontWeight.w500),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                      ),
                       textAlign: TextAlign.center,
                     ),
                   ],
@@ -170,7 +261,9 @@ class ActivityLogScreen extends StatelessWidget {
                 return Container(
                   margin: const EdgeInsets.only(bottom: 8),
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 10),
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.gray,
                     borderRadius: BorderRadius.circular(12),
@@ -178,11 +271,15 @@ class ActivityLogScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(log.deskripsi,
-                          style: Theme.of(context).textTheme.titleSmall),
+                      Text(
+                        log.deskripsi,
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
                       const SizedBox(height: 2),
-                      Text(log.waktu,
-                          style: Theme.of(context).textTheme.labelSmall),
+                      Text(
+                        log.waktu,
+                        style: Theme.of(context).textTheme.labelSmall,
+                      ),
                     ],
                   ),
                 );
@@ -241,16 +338,22 @@ class UpdateNotesScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.white,
                     borderRadius: BorderRadius.circular(10),
                     boxShadow: AppShadows.soft,
                   ),
-                  child: Text(version,
-                      style: const TextStyle(
-                          fontSize: 13, fontWeight: FontWeight.w800)),
+                  child: Text(
+                    version,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 10),
                 ...items.map(
@@ -259,10 +362,13 @@ class UpdateNotesScreen extends StatelessWidget {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('• ',
-                            style: TextStyle(
-                                color: AppColors.purple,
-                                fontWeight: FontWeight.w800)),
+                        const Text(
+                          '• ',
+                          style: TextStyle(
+                            color: AppColors.purple,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
                         Expanded(
                           child: Text(
                             item,
@@ -281,226 +387,6 @@ class UpdateNotesScreen extends StatelessWidget {
             ),
           );
         },
-      ),
-    );
-  }
-}
-
-/// Lapor bug — cerminan modal web: pilih fitur, tingkat keparahan, judul,
-/// deskripsi, langkah reproduksi. Di v1 disimpan ke log aktivitas lokal
-/// (web: hanya log + alert, tanpa server).
-class BugReportScreen extends StatefulWidget {
-  const BugReportScreen({super.key});
-
-  @override
-  State<BugReportScreen> createState() => _BugReportScreenState();
-}
-
-class _BugReportScreenState extends State<BugReportScreen> {
-  static const features = [
-    'Quick Record',
-    'Transaksi',
-    'Anggaran',
-    'Kartu',
-    'Dompet',
-    'Kategori',
-    'Utang',
-    'Tagihan',
-  ];
-  static const severities = ['Rendah', 'Sedang', 'Tinggi', 'Kritis'];
-
-  String _feature = 'Quick Record';
-  String _severity = 'Sedang';
-  final _titleController = TextEditingController();
-  final _descController = TextEditingController();
-  final _stepsController = TextEditingController();
-
-  Color _severityColor(String s) {
-    switch (s) {
-      case 'Rendah':
-        return AppColors.green;
-      case 'Sedang':
-        return AppColors.orange;
-      case 'Tinggi':
-        return AppColors.blue;
-      default:
-        return AppColors.danger;
-    }
-  }
-
-  Future<void> _submit() async {
-    final state = context.read<AppState>();
-    if (_titleController.text.trim().isEmpty ||
-        _descController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Judul dan deskripsi wajib diisi.')),
-      );
-      return;
-    }
-    await state.addLog(
-      'Mengirim Laporan Bug [$_feature - $_severity]: ${_titleController.text.trim()}',
-    );
-    if (!mounted) return;
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        content: const Text(
-          'Terima kasih! Laporan bug Anda berhasil dikirim ke tim pengembang.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              Navigator.of(context).pop();
-            },
-            child: Text(state.t('close')),
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    _titleController.dispose();
-    _descController.dispose();
-    _stepsController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final state = context.watch<AppState>();
-    return Scaffold(
-      backgroundColor: AppColors.white,
-      appBar: AppBar(title: Text(state.t('bug_report'))),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: AppColors.gray,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Aplikasi',
-                          style: Theme.of(context).textTheme.bodySmall),
-                      const Text('2.9.31',
-                          style: TextStyle(
-                              fontSize: 12, fontWeight: FontWeight.w700)),
-                    ],
-                  ),
-                  const SizedBox(height: 3),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Perangkat',
-                          style: Theme.of(context).textTheme.bodySmall),
-                      const Text('Android',
-                          style: TextStyle(
-                              fontSize: 12, fontWeight: FontWeight.w700)),
-                    ],
-                  ),
-                  const SizedBox(height: 3),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Bahasa',
-                          style: Theme.of(context).textTheme.bodySmall),
-                      Text(state.lang.toUpperCase(),
-                          style: const TextStyle(
-                              fontSize: 12, fontWeight: FontWeight.w700)),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 14),
-            Text('Fitur yang bermasalah',
-                style: Theme.of(context).textTheme.labelSmall),
-            const SizedBox(height: 5),
-            DropdownButtonFormField<String>(
-              initialValue: _feature,
-              items: features
-                  .map((f) =>
-                      DropdownMenuItem(value: f, child: Text(f)))
-                  .toList(),
-              onChanged: (v) => setState(() => _feature = v ?? _feature),
-            ),
-            const SizedBox(height: 12),
-            Text('Tingkat Keparahan',
-                style: Theme.of(context).textTheme.labelSmall),
-            const SizedBox(height: 5),
-            Row(
-              children: severities.map((s) {
-                final selected = s == _severity;
-                return Expanded(
-                  child: Padding(
-                    padding: EdgeInsets.only(
-                        right: s == severities.last ? 0 : 6),
-                    child: ChoiceChip(
-                      label: Text(s),
-                      selected: selected,
-                      onSelected: (_) => setState(() => _severity = s),
-                      selectedColor: _severityColor(s),
-                      labelStyle: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: selected ? Colors.white : AppColors.black,
-                      ),
-                      showCheckmark: false,
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 12),
-            Text('Judul Bug', style: Theme.of(context).textTheme.labelSmall),
-            const SizedBox(height: 5),
-            TextField(
-              controller: _titleController,
-              decoration: const InputDecoration(
-                  hintText: 'Deskripsi singkat masalahnya'),
-            ),
-            const SizedBox(height: 12),
-            Text('Deskripsi', style: Theme.of(context).textTheme.labelSmall),
-            const SizedBox(height: 5),
-            TextField(
-              controller: _descController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                  hintText: 'Apa yang terjadi? Apa yang seharusnya terjadi?'),
-            ),
-            const SizedBox(height: 12),
-            Text('Langkah Reproduksi (Opsional)',
-                style: Theme.of(context).textTheme.labelSmall),
-            const SizedBox(height: 5),
-            TextField(
-              controller: _stepsController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                  hintText: '1. Buka...\n2. Ketuk...\n3. Muncul error'),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _submit,
-                icon: const Icon(Icons.send_rounded, size: 18),
-                label: const Text('Kirim Laporan'),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

@@ -8,12 +8,14 @@ import 'format.dart';
 import 'models.dart';
 import 'prefs.dart';
 import 'strings.dart';
+import 'sync/sync_service.dart';
 
 /// State aplikasi — ChangeNotifier tunggal (provider).
 /// Cerminan variabel global web: accounts, activeAccount, transaksi,
 /// daftarTagihan, daftarPiutangSQL, currentLang, isPrivacyMode, idleTime.
 class AppState extends ChangeNotifier {
-  static const idleLockMinutes = 5; // sama seperti web: kunci setelah 5 mnt idle
+  static const idleLockMinutes =
+      5; // sama seperti web: kunci setelah 5 mnt idle
 
   bool _initialized = false;
   bool get initialized => _initialized;
@@ -32,6 +34,10 @@ class AppState extends ChangeNotifier {
   List<Bill> bills = [];
   List<Debt> debts = [];
   List<ActivityLog> logs = [];
+  List<BugReport> bugReports = [];
+
+  /// Layanan sync cloud (offline-first; no-op bila belum terkonfigurasi).
+  SyncService get sync => SyncService.instance;
 
   DateTime _lastInteraction = DateTime.now();
 
@@ -56,6 +62,9 @@ class AppState extends ChangeNotifier {
     }
     _initialized = true;
     notifyListeners();
+    // Sync cloud: fire-and-forget — tidak boleh menghambat buka aplikasi.
+    // Bila belum terkonfigurasi, SyncService langsung disabled (no-op).
+    unawaited(SyncService.instance.init());
   }
 
   Future<void> _loadProfileData() async {
@@ -66,6 +75,7 @@ class AppState extends ChangeNotifier {
     bills = await db.getBills(p);
     debts = await db.getDebts(p);
     logs = await db.getLogs(p);
+    bugReports = await db.getBugReports(p);
   }
 
   Future<void> reload() async {
@@ -79,6 +89,9 @@ class AppState extends ChangeNotifier {
     await db.insertProfile(name);
     profiles = await db.getProfiles();
     await switchProfile(name);
+    await SyncService.instance.recordChange('profiles', 0, 'upsert', {
+      'name': name,
+    });
     await addLog(t('profile_created'));
   }
 
@@ -102,6 +115,12 @@ class AppState extends ChangeNotifier {
     profiles = await DatabaseHelper.instance.getProfiles();
     activeProfile = newName;
     await PrefsHelper.setActiveProfile(newName);
+    await SyncService.instance.recordChange('profiles', 0, 'delete', {
+      'name': old,
+    });
+    await SyncService.instance.recordChange('profiles', 0, 'upsert', {
+      'name': newName,
+    });
     await addLog(t('profile_renamed', {'old': old, 'name': newName}));
     await _loadProfileData();
     notifyListeners();
@@ -162,7 +181,8 @@ class AppState extends ChangeNotifier {
   Future<void> checkIdleLock() async {
     final p = activeProfile;
     if (p == null || isLocked) return;
-    if (DateTime.now().difference(_lastInteraction).inMinutes >= idleLockMinutes) {
+    if (DateTime.now().difference(_lastInteraction).inMinutes >=
+        idleLockMinutes) {
       if (await hasPin()) {
         isLocked = true;
         notifyListeners();
@@ -191,9 +211,13 @@ class AppState extends ChangeNotifier {
   Future<void> addLog(String deskripsi) async {
     final p = activeProfile;
     if (p == null) return;
-    final waktu = DateFormat('d MMM yyyy, HH.mm', 'id_ID').format(DateTime.now());
-    await DatabaseHelper.instance
-        .insertLog(ActivityLog(profile: p, waktu: waktu, deskripsi: deskripsi));
+    final waktu = DateFormat(
+      'd MMM yyyy, HH.mm',
+      'id_ID',
+    ).format(DateTime.now());
+    await DatabaseHelper.instance.insertLog(
+      ActivityLog(profile: p, waktu: waktu, deskripsi: deskripsi),
+    );
     logs = await DatabaseHelper.instance.getLogs(p);
     notifyListeners();
   }
@@ -265,8 +289,419 @@ class AppState extends ChangeNotifier {
     return transactions.where((t) {
       final d = parseIsoDate(t.tanggal);
       return t.jenis == jenis && d.month == now.month && d.year == now.year;
-    }).toList()
-      ..sort((a, b) => b.tanggal.compareTo(a.tanggal));
+    }).toList()..sort((a, b) => b.tanggal.compareTo(a.tanggal));
+  }
+
+  // ---------- Transaksi (fase 2) ----------
+  Future<void> addTransaction(AppTransaction trx) async {
+    await DatabaseHelper.instance.insertTransaction(trx);
+    await SyncService.instance.recordChange(
+      'transactions',
+      trx.id,
+      'upsert',
+      trx.toMap(),
+    );
+    await addLog(t('trx_log_added', {'name': trx.keterangan}));
+    await _loadProfileData();
+    notifyListeners();
+  }
+
+  Future<void> updateTransaction(AppTransaction trx) async {
+    await DatabaseHelper.instance.updateTransaction(trx);
+    await SyncService.instance.recordChange(
+      'transactions',
+      trx.id,
+      'upsert',
+      trx.toMap(),
+    );
+    await addLog(t('trx_log_updated', {'name': trx.keterangan}));
+    await _loadProfileData();
+    notifyListeners();
+  }
+
+  Future<void> deleteTransaction(int id) async {
+    final trx = transactions.where((t) => t.id == id).firstOrNull;
+    await DatabaseHelper.instance.deleteTransaction(id);
+    await SyncService.instance.recordChange('transactions', id, 'delete', {
+      'id': id,
+    });
+    if (trx != null) {
+      await addLog(t('trx_log_deleted', {'name': trx.keterangan}));
+    }
+    await _loadProfileData();
+    notifyListeners();
+  }
+
+  // ---------- Tagihan (fase 2) ----------
+  Future<void> addBill(Bill bill) async {
+    await DatabaseHelper.instance.insertBill(bill);
+    await SyncService.instance.recordChange(
+      'bills',
+      bill.id,
+      'upsert',
+      bill.toMap(),
+    );
+    await addLog(t('bill_log_added', {'name': bill.nama}));
+    await _loadProfileData();
+    notifyListeners();
+  }
+
+  Future<void> deleteBill(int id) async {
+    final bill = bills.where((b) => b.id == id).firstOrNull;
+    await DatabaseHelper.instance.deleteBill(id);
+    await SyncService.instance.recordChange('bills', id, 'delete', {'id': id});
+    if (bill != null) {
+      await addLog(t('bill_log_deleted', {'name': bill.nama}));
+    }
+    await _loadProfileData();
+    notifyListeners();
+  }
+
+  /// Bayar tagihan — cerminan tandaiSelesaiTagihan() di web: buat transaksi
+  /// pengeluaran otomatis "Bayar Tagihan: [nama]" (Tagihan Bulanan, Cash,
+  /// tanggal hari ini) lalu tandai tagihan sudah.
+  Future<void> payBill(int id) async {
+    final bill = bills.where((b) => b.id == id).firstOrNull;
+    if (bill == null || bill.isLunas) return;
+    final auto = AppTransaction(
+      id: DateTime.now().millisecondsSinceEpoch,
+      profile: bill.profile,
+      jenis: 'pengeluaran',
+      tanggal: toIsoDate(DateTime.now()),
+      kategori: 'Tagihan Bulanan',
+      metodePembayaran: 'Cash',
+      keterangan: 'Bayar Tagihan: ${bill.nama}',
+      nominal: bill.nominal,
+    );
+    await DatabaseHelper.instance.insertTransaction(auto);
+    await SyncService.instance.recordChange(
+      'transactions',
+      auto.id,
+      'upsert',
+      auto.toMap(),
+    );
+    final paid = Bill(
+      id: bill.id,
+      profile: bill.profile,
+      nama: bill.nama,
+      nominal: bill.nominal,
+      tanggal: bill.tanggal,
+      status: 'sudah',
+    );
+    await DatabaseHelper.instance.updateBill(paid);
+    await SyncService.instance.recordChange(
+      'bills',
+      paid.id,
+      'upsert',
+      paid.toMap(),
+    );
+    await addLog(t('bill_log_settled', {'name': bill.nama}));
+    await _loadProfileData();
+    notifyListeners();
+  }
+
+  // ---------- Utang / piutang (fase 2) ----------
+  Future<void> addDebt(Debt debt) async {
+    await DatabaseHelper.instance.insertDebt(debt);
+    await SyncService.instance.recordChange(
+      'debts',
+      debt.id,
+      'upsert',
+      debt.toMap(),
+    );
+    await addLog(t('debt_log_added', {'name': debt.partnerName}));
+    await _loadProfileData();
+    notifyListeners();
+  }
+
+  Future<void> deleteDebt(int id) async {
+    final debt = debts.where((d) => d.id == id).firstOrNull;
+    await DatabaseHelper.instance.deleteDebt(id);
+    await SyncService.instance.recordChange('debts', id, 'delete', {'id': id});
+    if (debt != null) {
+      await addLog(
+        t('debt_log_deleted', {'jenis': debt.jenis, 'name': debt.partnerName}),
+      );
+    }
+    await _loadProfileData();
+    notifyListeners();
+  }
+
+  /// Selesaikan utang/piutang — cerminan tandaiSelesaiPiutang() di web:
+  /// buat transaksi otomatis (piutang menjadi pemasukan "Pelunasan Piutang",
+  /// utang menjadi pengeluaran "Pelunasan Hutang", kategori Lainnya, Cash,
+  /// tanggal hari ini) lalu tandai sudah.
+  /// Mengembalikan true bila cicilan berikutnya BISA dibuat
+  /// (cicilan ke saat ini masih di bawah tenor) — UI menanyakan ke pengguna.
+  Future<bool> settleDebt(int id) async {
+    final debt = debts.where((d) => d.id == id).firstOrNull;
+    if (debt == null || debt.isLunas) return false;
+    final auto = AppTransaction(
+      id: DateTime.now().millisecondsSinceEpoch,
+      profile: debt.profile,
+      jenis: debt.isPiutang ? 'pemasukan' : 'pengeluaran',
+      tanggal: toIsoDate(DateTime.now()),
+      kategori: 'Lainnya',
+      metodePembayaran: 'Cash',
+      keterangan: debt.isPiutang
+          ? 'Pelunasan Piutang: ${debt.partnerName}'
+          : 'Pelunasan Hutang: ${debt.partnerName}',
+      nominal: debt.nominal,
+    );
+    await DatabaseHelper.instance.insertTransaction(auto);
+    await SyncService.instance.recordChange(
+      'transactions',
+      auto.id,
+      'upsert',
+      auto.toMap(),
+    );
+    final done = Debt(
+      id: debt.id,
+      profile: debt.profile,
+      creatorName: debt.creatorName,
+      partnerName: debt.partnerName,
+      jenis: debt.jenis,
+      tipeTempo: debt.tipeTempo,
+      tenorBulan: debt.tenorBulan,
+      cicilanKe: debt.cicilanKe,
+      tanggal: debt.tanggal,
+      nominal: debt.nominal,
+      keterangan: debt.keterangan,
+      status: 'sudah',
+      syncCode: debt.syncCode,
+      buktiPath: debt.buktiPath,
+    );
+    await DatabaseHelper.instance.updateDebt(done);
+    await SyncService.instance.recordChange(
+      'debts',
+      done.id,
+      'upsert',
+      done.toMap(),
+    );
+    await addLog(
+      t('debt_log_settled', {'jenis': debt.jenis, 'name': debt.partnerName}),
+    );
+    await _loadProfileData();
+    notifyListeners();
+    return debt.tipeTempo == 'cicilan' &&
+        (debt.cicilanKe ?? 0) < (debt.tenorBulan ?? 0);
+  }
+
+  /// Buat cicilan berikutnya otomatis (tanggal +1 bulan, cicilan_ke+1,
+  /// sync code baru) — cerminan web saat pengguna menjawab "Ya".
+  Future<void> createNextInstallment(int settledId) async {
+    final debt = debts.where((d) => d.id == settledId).firstOrNull;
+    if (debt == null) return;
+    if (debt.tipeTempo != 'cicilan') return;
+    final nextKe = (debt.cicilanKe ?? 0) + 1;
+    if (nextKe > (debt.tenorBulan ?? 0)) return;
+    final nextDate = parseIsoDate(debt.tanggal);
+    final due = DateTime(nextDate.year, nextDate.month + 1, nextDate.day);
+    final next = Debt(
+      id: DateTime.now().millisecondsSinceEpoch + 1,
+      profile: debt.profile,
+      creatorName: debt.creatorName,
+      partnerName: debt.partnerName,
+      jenis: debt.jenis,
+      tipeTempo: 'cicilan',
+      tenorBulan: debt.tenorBulan,
+      cicilanKe: nextKe,
+      tanggal: toIsoDate(due),
+      nominal: debt.nominal,
+      keterangan: debt.keterangan,
+      status: 'belum',
+      syncCode: _newSyncCode(),
+      buktiPath: debt.buktiPath,
+    );
+    await DatabaseHelper.instance.insertDebt(next);
+    await SyncService.instance.recordChange(
+      'debts',
+      next.id,
+      'upsert',
+      next.toMap(),
+    );
+    await addLog(t('debt_log_added', {'name': debt.partnerName}));
+    await _loadProfileData();
+    notifyListeners();
+  }
+
+  /// Kode sinkronisasi UTG-XXXXXX (cerminan generateSyncCode() di web;
+  /// di v1/v2 disimpan lokal saja, tanpa sinkronisasi server).
+  String _newSyncCode() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    final now = DateTime.now().millisecondsSinceEpoch;
+    var seed = now;
+    final buf = StringBuffer('UTG-');
+    for (var i = 0; i < 6; i++) {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      buf.write(chars[seed % chars.length]);
+    }
+    return buf.toString();
+  }
+
+  // ---------- Laporan bug (fase 2, tersimpan lokal) ----------
+  Future<void> addBugReport(BugReport report) async {
+    final id = await DatabaseHelper.instance.insertBugReport(report);
+    final saved = BugReport(
+      id: id,
+      profile: report.profile,
+      fitur: report.fitur,
+      severity: report.severity,
+      judul: report.judul,
+      deskripsi: report.deskripsi,
+      langkah: report.langkah,
+      waktu: report.waktu,
+      createdAt: report.createdAt,
+    );
+    await SyncService.instance.recordChange(
+      'bug_reports',
+      id,
+      'upsert',
+      saved.toMap(),
+    );
+    await addLog(
+      'Mengirim Laporan Bug [${report.fitur} - ${report.severity}]: ${report.judul}',
+    );
+    await _loadProfileData();
+    notifyListeners();
+  }
+
+  Future<void> deleteBugReport(int id) async {
+    await DatabaseHelper.instance.deleteBugReport(id);
+    await SyncService.instance.recordChange('bug_reports', id, 'delete', {
+      'id': id,
+    });
+    await _loadProfileData();
+    notifyListeners();
+  }
+
+  // ---------- Helper Wallet (fase 2) ----------
+  /// Transaksi bulan tertentu (urut tanggal desc) — untuk Wallet.
+  List<AppTransaction> transactionsForMonth(int year, int month) {
+    return transactions.where((t) {
+      final d = parseIsoDate(t.tanggal);
+      return d.year == year && d.month == month;
+    }).toList()..sort((a, b) {
+      final cmp = b.tanggal.compareTo(a.tanggal);
+      return cmp != 0 ? cmp : b.id.compareTo(a.id);
+    });
+  }
+
+  /// Total pengeluaran harian dalam sebulan (untuk grafik garis Wallet).
+  Map<int, int> dailyExpense(int year, int month) {
+    final map = <int, int>{};
+    for (final t in transactions) {
+      final d = parseIsoDate(t.tanggal);
+      if (!t.isPemasukan && d.year == year && d.month == month) {
+        map[d.day] = (map[d.day] ?? 0) + t.nominal;
+      }
+    }
+    return map;
+  }
+
+  /// Transaksi Wallet dengan filter pencarian / rentang tanggal / jenis.
+  /// jenis: 'semua' | 'pemasukan' | 'pengeluaran' (piutang ditangani terpisah).
+  List<AppTransaction> walletTransactions({
+    String search = '',
+    String? from,
+    String? to,
+    String jenis = 'semua',
+  }) {
+    final q = search.trim().toLowerCase();
+    return transactions.where((t) {
+      if (jenis != 'semua' && t.jenis != jenis) return false;
+      if (from != null && from.isNotEmpty && t.tanggal.compareTo(from) < 0) {
+        return false;
+      }
+      if (to != null && to.isNotEmpty && t.tanggal.compareTo(to) > 0) {
+        return false;
+      }
+      if (q.isEmpty) return true;
+      return t.keterangan.toLowerCase().contains(q) ||
+          t.kategori.toLowerCase().contains(q);
+    }).toList()..sort((a, b) {
+      final cmp = b.tanggal.compareTo(a.tanggal);
+      return cmp != 0 ? cmp : b.id.compareTo(a.id);
+    });
+  }
+
+  /// Utang/piutang untuk filter Wallet: 'semua' hanya yang belum lunas,
+  /// 'piutang' menampilkan semua (cerminan renderSemuaTransaksi di web).
+  List<Debt> walletDebts({
+    String search = '',
+    String? from,
+    String? to,
+    String jenis = 'semua',
+  }) {
+    final q = search.trim().toLowerCase();
+    return debts.where((d) {
+      if (jenis == 'semua' && d.isLunas) return false;
+      if (from != null && from.isNotEmpty && d.tanggal.compareTo(from) < 0) {
+        return false;
+      }
+      if (to != null && to.isNotEmpty && d.tanggal.compareTo(to) > 0) {
+        return false;
+      }
+      if (q.isEmpty) return true;
+      return d.partnerName.toLowerCase().contains(q) ||
+          d.keterangan.toLowerCase().contains(q) ||
+          d.jenis.toLowerCase().contains(q);
+    }).toList()..sort((a, b) {
+      final cmp = b.tanggal.compareTo(a.tanggal);
+      return cmp != 0 ? cmp : b.id.compareTo(a.id);
+    });
+  }
+
+  // ---------- Helper Report (fase 2) ----------
+  /// Periode (YYYY-MM) yang punya pengeluaran, terbaru dulu.
+  List<String> get expensePeriods {
+    final set = <String>{};
+    for (final t in transactions) {
+      if (t.isPemasukan) continue;
+      final d = parseIsoDate(t.tanggal);
+      set.add('${d.year}-${d.month.toString().padLeft(2, '0')}');
+    }
+    return set.toList()..sort((a, b) => b.compareTo(a));
+  }
+
+  /// Kategori pengeluaran yang ada.
+  List<String> get expenseCategories {
+    final set = <String>{};
+    for (final t in transactions) {
+      if (!t.isPemasukan) set.add(t.kategori);
+    }
+    return set.toList()..sort();
+  }
+
+  /// Transaksi pengeluaran terfilter periode + kategori (urut tanggal desc).
+  List<AppTransaction> reportTransactions({
+    String periode = 'semua',
+    String kategori = 'semua',
+  }) {
+    return transactions.where((t) {
+      if (t.isPemasukan) return false;
+      if (kategori != 'semua' && t.kategori != kategori) return false;
+      if (periode != 'semua') {
+        final d = parseIsoDate(t.tanggal);
+        final p = '${d.year}-${d.month.toString().padLeft(2, '0')}';
+        if (p != periode) return false;
+      }
+      return true;
+    }).toList()..sort((a, b) => b.tanggal.compareTo(a.tanggal));
+  }
+
+  /// Agregasi untuk donut: bila kategori 'semua' → per kategori;
+  /// bila satu kategori dipilih → per keterangan (cerminan renderLaporan).
+  Map<String, int> reportAggregation({
+    String periode = 'semua',
+    String kategori = 'semua',
+  }) {
+    final map = <String, int>{};
+    for (final t in reportTransactions(periode: periode, kategori: kategori)) {
+      final key = kategori == 'semua' ? t.kategori : t.keterangan;
+      map[key] = (map[key] ?? 0) + t.nominal;
+    }
+    return map;
   }
 
   Timer? _idleTimer;
@@ -274,7 +709,10 @@ class AppState extends ChangeNotifier {
   /// Mulai timer idle 1 menit (cek tiap menit, seperti web).
   void startIdleTimer() {
     _idleTimer?.cancel();
-    _idleTimer = Timer.periodic(const Duration(minutes: 1), (_) => checkIdleLock());
+    _idleTimer = Timer.periodic(
+      const Duration(minutes: 1),
+      (_) => checkIdleLock(),
+    );
   }
 
   @override

@@ -16,11 +16,28 @@ dependencies:
   shared_preferences: ^2.3.3
   provider: ^6.1.2
   intl: ^0.20.1
+  pdf: ^3.11.1
+  path_provider: ^2.1.5
+  share_plus: ^10.0.0
+  image_picker: ^1.1.2
+  supabase_flutter: ^2.9.0
+  # OCR struk on-device (ML Kit Text Recognition v2, Latin, varian bundled:
+  # model ter-link statis, offline sejak install, tanpa API key/server).
+  # v0.16.0 = terakhir yang cocok Flutter 3.35.7 (0.17.x butuh Flutter 3.44+).
+  google_mlkit_text_recognition: ^0.16.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+
+dependency_overrides:
+  # pdf 3.12.0 membatasi archive <4.1.0, tapi image 4.11.0 (dipakai pdf)
+  # memanggil ZLibDecoder.decodeLazy yang baru ada di archive >=4.5.0.
+  # pdf 3.13.x memperbaiki batas ini tapi butuh Dart >=3.12, sementara
+  # Flutter 3.35.7 (lokal & workflow) masih Dart 3.9.2 — jadi paksa
+  # archive 4.6.0 sampai Flutter dinaikkan. Hapus override ini saat upgrade.
+  archive: ^4.6.0
   flutter_launcher_icons: ^0.14.3
 
 flutter:

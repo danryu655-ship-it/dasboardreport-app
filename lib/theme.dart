@@ -35,26 +35,26 @@ class AppRadius {
 
 class AppShadows {
   static List<BoxShadow> get soft => [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.04),
-          blurRadius: 12,
-          offset: const Offset(0, 4),
-        ),
-      ];
+    BoxShadow(
+      color: Colors.black.withValues(alpha: 0.04),
+      blurRadius: 12,
+      offset: const Offset(0, 4),
+    ),
+  ];
   static List<BoxShadow> get nav => [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.20),
-          blurRadius: 25,
-          offset: const Offset(0, 10),
-        ),
-      ];
+    BoxShadow(
+      color: Colors.black.withValues(alpha: 0.20),
+      blurRadius: 25,
+      offset: const Offset(0, 10),
+    ),
+  ];
   static List<BoxShadow> get fab => [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.20),
-          blurRadius: 10,
-          offset: const Offset(0, 4),
-        ),
-      ];
+    BoxShadow(
+      color: Colors.black.withValues(alpha: 0.20),
+      blurRadius: 10,
+      offset: const Offset(0, 4),
+    ),
+  ];
 }
 
 /// Dekorasi kartu standar: putih, radius 20, border abu, shadow lembut.
@@ -83,25 +83,52 @@ ThemeData buildAppTheme() {
     ),
   );
 
-  final textTheme = GoogleFonts.plusJakartaSansTextTheme(base.textTheme).copyWith(
-    // Judul besar (saldo utama): 32, extra-bold, letter-spacing -1.
-    displayLarge: GoogleFonts.plusJakartaSans(
-      fontSize: 32, fontWeight: FontWeight.w800, letterSpacing: -1, color: AppColors.black),
-    headlineMedium: GoogleFonts.plusJakartaSans(
-      fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: -0.5, color: AppColors.black),
-    titleLarge: GoogleFonts.plusJakartaSans(
-      fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.black),
-    titleMedium: GoogleFonts.plusJakartaSans(
-      fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.black),
-    titleSmall: GoogleFonts.plusJakartaSans(
-      fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.black),
-    bodyMedium: GoogleFonts.plusJakartaSans(
-      fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.black),
-    bodySmall: GoogleFonts.plusJakartaSans(
-      fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted),
-    labelSmall: GoogleFonts.plusJakartaSans(
-      fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.muted),
-  );
+  final textTheme = GoogleFonts.plusJakartaSansTextTheme(base.textTheme)
+      .copyWith(
+        // Judul besar (saldo utama): 32, extra-bold, letter-spacing -1.
+        displayLarge: GoogleFonts.plusJakartaSans(
+          fontSize: 32,
+          fontWeight: FontWeight.w800,
+          letterSpacing: -1,
+          color: AppColors.black,
+        ),
+        headlineMedium: GoogleFonts.plusJakartaSans(
+          fontSize: 24,
+          fontWeight: FontWeight.w800,
+          letterSpacing: -0.5,
+          color: AppColors.black,
+        ),
+        titleLarge: GoogleFonts.plusJakartaSans(
+          fontSize: 18,
+          fontWeight: FontWeight.w800,
+          color: AppColors.black,
+        ),
+        titleMedium: GoogleFonts.plusJakartaSans(
+          fontSize: 15,
+          fontWeight: FontWeight.w800,
+          color: AppColors.black,
+        ),
+        titleSmall: GoogleFonts.plusJakartaSans(
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+          color: AppColors.black,
+        ),
+        bodyMedium: GoogleFonts.plusJakartaSans(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: AppColors.black,
+        ),
+        bodySmall: GoogleFonts.plusJakartaSans(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: AppColors.muted,
+        ),
+        labelSmall: GoogleFonts.plusJakartaSans(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: AppColors.muted,
+        ),
+      );
 
   return base.copyWith(
     textTheme: textTheme,
@@ -109,7 +136,10 @@ ThemeData buildAppTheme() {
       style: ElevatedButton.styleFrom(
         backgroundColor: AppColors.black,
         foregroundColor: AppColors.white,
-        textStyle: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w700),
+        textStyle: GoogleFonts.plusJakartaSans(
+          fontSize: 14,
+          fontWeight: FontWeight.w700,
+        ),
         padding: const EdgeInsets.symmetric(vertical: 14),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),

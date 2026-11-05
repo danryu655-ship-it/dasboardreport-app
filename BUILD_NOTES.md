@@ -160,3 +160,42 @@ diinvestigasi, bukan blocker saat ini.
   lapor bug; OCR struk (perlu riset ML Kit/tesseract).
 - Sinkronisasi server TIDAK termasuk v1 (keputusan pengguna): tanpa API MySQL,
   tanpa URL Google Sheets, tanpa field pengaturan untuk itu.
+
+## 7. Fase 2 (2026-11-06) — catatan build
+
+- Arsitektur baru (keputusan user): Supabase untuk semua data cloud +
+  Google Sheets backup/export; lokal sqflite tetap primer (offline-first).
+  Detail: `docs/supabase-setup.md`, `docs/supabase-schema.sql`,
+  `docs/sheets-backup-schema.md`, `docs/sheets-backup-apps-script.gs`.
+- Proyek Supabase terverifikasi: `https://nbyhscsladjdmwzaomit.supabase.co`
+  (OpenAPI public schema v14.18; skema MASIH KOSONG — SQL belum dijalankan
+  user di dashboard SQL editor; GET /rest/v1/transactions → 404).
+- Spreadsheet backup SUDAH ADA: "Backup DasboardReport"
+  (ID `1Y2heyVU5LCaSGrv_QXWZxNHa7X2gcov4RpHDYfBQWsg`); skema + Apps Script
+  disesuaikan dengan tab/kolom sheet tersebut (jangan buat spreadsheet baru).
+- Dependensi baru: `pdf`, `path_provider`, `share_plus`, `image_picker`,
+  `supabase_flutter`. `flutter pub get` OK.
+- **Konflik versi (diperbaiki):** `pdf 3.12.0` membatasi `archive <4.1.0`,
+  tapi `image 4.11.0` (transitif via pdf) memanggil
+  `ZLibDecoder.decodeLazy` yang baru ada di `archive >=4.5.0` → `flutter
+  test` gagal compile. `pdf 3.13.x` memperbaiki batas ini tapi butuh Dart
+  >=3.12 (Flutter 3.35.7 = Dart 3.9.2, lokal & workflow). Solusi:
+  `dependency_overrides: archive: ^4.6.0` di `pubspec.yaml` (dengan
+  komentar alasan). Hapus override saat Flutter dinaikkan.
+  Setelah override: `archive 4.6.0`, `image 4.11.0`, `pdf 3.12.0`.
+- DB v3: `bug_reports` + `sync_queue` (migrasi onUpgrade bertahap).
+- `flutter analyze`: **No issues found.** `flutter test`: **17 test lolos**
+  (1 smoke + 5 parser struk + 7 config cloud/backup + 4 SafeArea nav).
+- Bug nav bar: `home_shell.dart` bottom nav dibungkus `SafeArea`
+  (lihat DESIGN_AND_MAPPING §5.4).
+- TIDAK dilakukan fase 2: build APK lokal (tetap mustahil di VM — Gradle
+  daemon TCP diblokir), push GitHub, keystore, deploy Apps Script, dan
+  pembuatan tabel Supabase (butuh SQL editor dashboard oleh user).
+- File baru fase 2: `lib/screens/` transaction_form, wallet, report,
+  bills, debts, split, calendar, wrapped, export, bug_report,
+  ocr_service; `lib/services/export_service.dart`;
+  `lib/sync/` supabase_config, sync_service, sheets_backup;
+  `docs/` supabase-schema.sql, supabase-setup.md, sheets-backup-schema.md,
+  sheets-backup-apps-script.gs; `test/` receipt_parser_test,
+  cloud_config_test, safe_area_nav_test.
+- Hasil lengkap + langkah user: `PHASE2_RESULT.md`.

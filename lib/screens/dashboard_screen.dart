@@ -3,9 +3,16 @@ import 'package:provider/provider.dart';
 
 import '../app_state.dart';
 import '../format.dart';
+import '../models.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import 'bills_screen.dart';
+import 'calendar_screen.dart';
+import 'debts_screen.dart';
 import 'profile_screen.dart';
+import 'split_screen.dart';
+import 'transaction_form_screen.dart';
+import 'wrapped_screen.dart';
 
 /// Dashboard — cerminan `#tab-dashboard` di web:
 /// header + saldo utama + action bar + 4 kartu ringkasan + transaksi terbaru.
@@ -20,11 +27,32 @@ class DashboardScreen extends StatelessWidget {
     required this.onGoReport,
   });
 
-  void _showMonthDetail(
-      BuildContext context, AppState state, String jenis) {
+  void _openForm(BuildContext context, {AppTransaction? existing}) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TransactionFormScreen(existing: existing),
+      ),
+    );
+  }
+
+  Future<void> _deleteTrx(
+    BuildContext context,
+    AppState state,
+    AppTransaction trx,
+  ) async {
+    final ok = await showAppConfirm(
+      context,
+      title: state.t('delete'),
+      message: state.t('delete_trx_confirm'),
+      confirmLabel: state.t('delete'),
+      isDestructive: true,
+    );
+    if (ok == true) await state.deleteTransaction(trx.id);
+  }
+
+  void _showMonthDetail(BuildContext context, AppState state, String jenis) {
     final list = state.monthTransactions(jenis);
-    final total =
-        list.fold<int>(0, (sum, t) => sum + t.nominal);
+    final total = list.fold<int>(0, (sum, t) => sum + t.nominal);
     final isIn = jenis == 'pemasukan';
     showModalBottomSheet<void>(
       context: context,
@@ -108,10 +136,8 @@ class DashboardScreen extends StatelessWidget {
                     : ListView.builder(
                         controller: controller,
                         itemCount: list.length,
-                        itemBuilder: (_, i) => TransactionTile(
-                          trx: list[i],
-                          state: state,
-                        ),
+                        itemBuilder: (_, i) =>
+                            TransactionTile(trx: list[i], state: state),
                       ),
               ),
             ],
@@ -172,7 +198,9 @@ class DashboardScreen extends StatelessWidget {
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 10),
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
                     decoration: BoxDecoration(
                       color: AppColors.gray,
                       borderRadius: BorderRadius.circular(14),
@@ -183,8 +211,10 @@ class DashboardScreen extends StatelessWidget {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(b.nama,
-                                style: Theme.of(context).textTheme.titleSmall),
+                            Text(
+                              b.nama,
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
                             Text(
                               'Tempo: ${formatTanggalPendek(parseIsoDate(b.tanggal))}',
                               style: Theme.of(context).textTheme.labelSmall,
@@ -192,12 +222,8 @@ class DashboardScreen extends StatelessWidget {
                           ],
                         ),
                         Text(
-                          state.isPrivacyMode
-                              ? '•••'
-                              : formatRupiah(b.nominal),
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleSmall
+                          state.isPrivacyMode ? '•••' : formatRupiah(b.nominal),
+                          style: Theme.of(context).textTheme.titleSmall
                               ?.copyWith(color: AppColors.orange),
                         ),
                       ],
@@ -270,7 +296,9 @@ class DashboardScreen extends StatelessWidget {
                             borderRadius: BorderRadius.circular(20),
                             child: Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 4),
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
                               decoration: BoxDecoration(
                                 color: AppColors.gray,
                                 borderRadius: BorderRadius.circular(20),
@@ -278,12 +306,16 @@ class DashboardScreen extends StatelessWidget {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(Icons.person_rounded,
-                                      size: 13, color: AppColors.purple),
+                                  const Icon(
+                                    Icons.person_rounded,
+                                    size: 13,
+                                    color: AppColors.purple,
+                                  ),
                                   const SizedBox(width: 4),
                                   ConstrainedBox(
-                                    constraints:
-                                        const BoxConstraints(maxWidth: 100),
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 100,
+                                    ),
                                     child: Text(
                                       state.activeProfile ?? 'Akun',
                                       overflow: TextOverflow.ellipsis,
@@ -294,8 +326,11 @@ class DashboardScreen extends StatelessWidget {
                                     ),
                                   ),
                                   const SizedBox(width: 2),
-                                  const Icon(Icons.expand_more_rounded,
-                                      size: 13, color: AppColors.muted),
+                                  const Icon(
+                                    Icons.expand_more_rounded,
+                                    size: 13,
+                                    color: AppColors.muted,
+                                  ),
                                 ],
                               ),
                             ),
@@ -308,7 +343,11 @@ class DashboardScreen extends StatelessWidget {
                     children: [
                       CircleIconButton(
                         icon: Icons.calendar_month_rounded,
-                        onTap: () => showComingSoon(context, state),
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const CalendarScreen(),
+                          ),
+                        ),
                       ),
                       const SizedBox(width: 8),
                       CircleIconButton(
@@ -322,7 +361,9 @@ class DashboardScreen extends StatelessWidget {
                                   color: AppColors.danger,
                                   shape: BoxShape.circle,
                                   border: Border.all(
-                                      color: AppColors.white, width: 2),
+                                    color: AppColors.white,
+                                    width: 2,
+                                  ),
                                 ),
                               )
                             : null,
@@ -337,9 +378,9 @@ class DashboardScreen extends StatelessWidget {
               Text(
                 state.t('main_balance'),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               const SizedBox(height: 6),
               Row(
@@ -370,22 +411,28 @@ class DashboardScreen extends StatelessWidget {
                   _ActionItem(
                     icon: Icons.add_rounded,
                     label: state.t('btn_add'),
-                    onTap: () => showComingSoon(context, state),
+                    onTap: () => _openForm(context),
                   ),
                   _ActionItem(
                     icon: Icons.safety_divider_rounded,
                     label: state.t('btn_split'),
-                    onTap: () => showComingSoon(context, state),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const SplitScreen()),
+                    ),
                   ),
                   _ActionItem(
                     icon: Icons.handshake_rounded,
                     label: state.t('btn_debt'),
-                    onTap: () => showComingSoon(context, state),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const DebtsScreen()),
+                    ),
                   ),
                   _ActionItem(
                     icon: Icons.auto_awesome_rounded,
                     label: state.t('btn_wrap'),
-                    onTap: () => showComingSoon(context, state),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const WrappedScreen()),
+                    ),
                   ),
                 ],
               ),
@@ -413,8 +460,7 @@ class DashboardScreen extends StatelessWidget {
                     amount: state.isPrivacyMode
                         ? '•••'
                         : formatRupiah(state.monthIncome),
-                    onTap: () =>
-                        _showMonthDetail(context, state, 'pemasukan'),
+                    onTap: () => _showMonthDetail(context, state, 'pemasukan'),
                   ),
                   SummaryCard(
                     color: AppColors.blue,
@@ -431,7 +477,9 @@ class DashboardScreen extends StatelessWidget {
                     icon: Icons.receipt_long_rounded,
                     label: state.t('upcoming_bills'),
                     amount: '${state.unpaidBills.length} Item',
-                    onTap: () => showComingSoon(context, state),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const BillsScreen()),
+                    ),
                   ),
                   SummaryCard(
                     color: AppColors.orange,
@@ -440,7 +488,9 @@ class DashboardScreen extends StatelessWidget {
                     amount: state.isPrivacyMode
                         ? '•••'
                         : formatRupiah(state.netReceivable),
-                    onTap: () => showComingSoon(context, state),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const DebtsScreen()),
+                    ),
                   ),
                 ],
               ),
@@ -468,7 +518,8 @@ class DashboardScreen extends StatelessWidget {
                   (t) => TransactionTile(
                     trx: t,
                     state: state,
-                    onTap: () => showComingSoon(context, state),
+                    onTap: () => _openForm(context, existing: t),
+                    onDelete: () => _deleteTrx(context, state, t),
                   ),
                 ),
             ],

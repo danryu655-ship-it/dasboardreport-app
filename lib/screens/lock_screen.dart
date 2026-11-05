@@ -48,17 +48,17 @@ class _LockScreenState extends State<LockScreen> {
       if (ok) {
         widget.onUnlocked?.call();
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(state.t('pin_wrong'))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(state.t('pin_wrong'))));
         setState(() => _pin = '');
       }
     } else {
       // Mode set: kosong = hapus PIN; 4 digit = simpan (cerminan web).
       if (_pin.isNotEmpty && _pin.length != 4) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('PIN harus 4 digit')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('PIN harus 4 digit')));
         return;
       }
       await state.savePin(_pin);
@@ -81,14 +81,17 @@ class _LockScreenState extends State<LockScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(state.t('pin_reset_title'),
-            style: Theme.of(context).textTheme.titleLarge),
+        title: Text(
+          state.t('pin_reset_title'),
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(state.t('pin_reset_hint',
-                {'name': state.activeProfile ?? ''})),
+            Text(
+              state.t('pin_reset_hint', {'name': state.activeProfile ?? ''}),
+            ),
             const SizedBox(height: 12),
             TextField(
               controller: controller,
@@ -114,9 +117,7 @@ class _LockScreenState extends State<LockScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          ok ? state.t('pin_reset_ok') : state.t('pin_reset_fail'),
-        ),
+        content: Text(ok ? state.t('pin_reset_ok') : state.t('pin_reset_fail')),
       ),
     );
     if (ok) widget.onUnlocked?.call();
@@ -192,9 +193,7 @@ class _LockScreenState extends State<LockScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                _isVerify
-                    ? state.t('pin_sub_verify')
-                    : state.t('pin_sub_set'),
+                _isVerify ? state.t('pin_sub_verify') : state.t('pin_sub_set'),
                 style: Theme.of(context).textTheme.bodySmall,
                 textAlign: TextAlign.center,
               ),
@@ -234,8 +233,11 @@ class _LockScreenState extends State<LockScreen> {
                       children: [
                         const SizedBox(width: 72, height: 72),
                         _keyButton('0', onTap: () => _pressDigit('0')),
-                        _keyButton('', icon: Icons.backspace_outlined,
-                            onTap: _backspace),
+                        _keyButton(
+                          '',
+                          icon: Icons.backspace_outlined,
+                          onTap: _backspace,
+                        ),
                       ],
                     ),
                   ],

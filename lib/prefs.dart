@@ -42,4 +42,14 @@ class PrefsHelper {
       await prefs.remove(_pinKey(oldName));
     }
   }
+
+  // ---------- Sinkronisasi cloud ----------
+  static const _kLastSyncAt = 'last_sync_at';
+
+  /// Waktu sinkronisasi Supabase terakhir (ms epoch). null = belum pernah.
+  static Future<int?> getLastSyncAt() async =>
+      (await _prefs).getInt(_kLastSyncAt);
+
+  static Future<void> setLastSyncAt(int value) async =>
+      (await _prefs).setInt(_kLastSyncAt, value);
 }

@@ -1,9 +1,113 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import 'app_state.dart';
 import 'format.dart';
 import 'models.dart';
 import 'theme.dart';
+
+/// Akses AppState dari context (dipakai semua layar fase 2).
+extension WatchAppState on BuildContext {
+  AppState watchAppState() => watch<AppState>();
+}
+
+/// Snackbar aplikasi (hijau sukses / merah error, ala alert web).
+void showAppSnack(
+  BuildContext context,
+  String message, {
+  bool isError = false,
+}) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(message),
+      backgroundColor: isError ? AppColors.danger : AppColors.green,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    ),
+  );
+}
+
+/// Dialog konfirmasi (ala confirm() web). Mengembalikan true bila pengguna
+/// menekan tombol konfirmasi.
+Future<bool?> showAppConfirm(
+  BuildContext context, {
+  required String title,
+  required String message,
+  required String confirmLabel,
+  bool isDestructive = false,
+}) {
+  return showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Text(title),
+      content: Text(message),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(false),
+          child: const Text('Batal'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(true),
+          child: Text(
+            confirmLabel,
+            style: TextStyle(
+              color: isDestructive ? AppColors.danger : AppColors.purple,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+/// Tombol utama aplikasi — cerminan .btn-primary web (ungu, radius 14).
+class AppButton extends StatelessWidget {
+  final String label;
+  final VoidCallback? onPressed;
+  final bool isLoading;
+  const AppButton({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.isLoading = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 52,
+      child: ElevatedButton(
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.purple,
+          foregroundColor: AppColors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          elevation: 0,
+        ),
+        child: isLoading
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.white,
+                ),
+              )
+            : Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+      ),
+    );
+  }
+}
 
 /// Ikon Material yang setara dengan Material Symbols Rounded di web.
 IconData categoryIcon(String kategori) {
@@ -33,17 +137,24 @@ class TransactionTile extends StatelessWidget {
   final AppState state;
   final VoidCallback? onTap;
 
+  /// Bila diisi, tampil tombol hapus kecil di kanan (dipakai daftar
+  /// dashboard & Wallet; sheet rincian bulan tidak menampilkannya).
+  final VoidCallback? onDelete;
+
   const TransactionTile({
     super.key,
     required this.trx,
     required this.state,
     this.onTap,
+    this.onDelete,
   });
 
   @override
   Widget build(BuildContext context) {
     final isInc = trx.isPemasukan;
-    final icon = isInc ? Icons.arrow_downward_rounded : categoryIcon(trx.kategori);
+    final icon = isInc
+        ? Icons.arrow_downward_rounded
+        : categoryIcon(trx.kategori);
 
     var subInfo = trx.kategori;
     if (trx.kategori == 'Investasi' && trx.investasiSub.isNotEmpty) {
@@ -52,7 +163,9 @@ class TransactionTile extends StatelessWidget {
         subInfo += ' (${trx.cryptoToken})';
       }
     }
-    var metodeText = trx.metodePembayaran.isNotEmpty ? ' • ${trx.metodePembayaran}' : '';
+    var metodeText = trx.metodePembayaran.isNotEmpty
+        ? ' • ${trx.metodePembayaran}'
+        : '';
     if (trx.detailBank.isNotEmpty) {
       metodeText += trx.tujuanBank.isNotEmpty
           ? ' (${trx.detailBank} ➔ ${trx.tujuanBank})'
@@ -89,11 +202,15 @@ class TransactionTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(trx.keterangan,
-                      style: Theme.of(context).textTheme.titleSmall),
+                  Text(
+                    trx.keterangan,
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
                   const SizedBox(height: 3),
-                  Text('$subInfo$metodeText',
-                      style: Theme.of(context).textTheme.labelSmall),
+                  Text(
+                    '$subInfo$metodeText',
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
                   const SizedBox(height: 3),
                   Text(
                     formatTanggalPendek(parseIsoDate(trx.tanggal)),
@@ -102,11 +219,30 @@ class TransactionTile extends StatelessWidget {
                 ],
               ),
             ),
-            Text(
-              amountText,
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  amountText,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
                     color: isInc ? AppColors.green : AppColors.black,
                   ),
+                ),
+                if (onDelete != null)
+                  InkWell(
+                    onTap: onDelete,
+                    borderRadius: BorderRadius.circular(12),
+                    child: const Padding(
+                      padding: EdgeInsets.all(4),
+                      child: Icon(
+                        Icons.delete_outline_rounded,
+                        size: 16,
+                        color: AppColors.danger,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ],
         ),
@@ -119,9 +255,9 @@ class TransactionTile extends StatelessWidget {
 class GoogleFontsLike {
   static TextStyle muted10(BuildContext context) =>
       Theme.of(context).textTheme.bodySmall?.copyWith(
-            fontSize: 10,
-            fontWeight: FontWeight.w500,
-          ) ??
+        fontSize: 10,
+        fontWeight: FontWeight.w500,
+      ) ??
       const TextStyle(fontSize: 10, color: AppColors.muted);
 }
 
@@ -226,9 +362,9 @@ class SectionHeader extends StatelessWidget {
             child: Text(
               linkLabel!,
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
       ],
@@ -268,12 +404,16 @@ class SettingsItem extends StatelessWidget {
               Icon(icon, size: 20, color: iconColor),
               const SizedBox(width: 10),
               Expanded(
-                child: Text(label,
-                    style: Theme.of(context).textTheme.titleSmall),
+                child: Text(
+                  label,
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
               ),
               trailing ??
-                  const Icon(Icons.chevron_right_rounded,
-                      color: AppColors.muted),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: AppColors.muted,
+                  ),
             ],
           ),
         ),
@@ -306,8 +446,7 @@ class CircleIconButton extends StatelessWidget {
       children: [
         Material(
           color: AppColors.white,
-          shape: const CircleBorder(
-              side: BorderSide(color: AppColors.border)),
+          shape: const CircleBorder(side: BorderSide(color: AppColors.border)),
           child: InkWell(
             onTap: onTap,
             customBorder: const CircleBorder(),
@@ -318,8 +457,7 @@ class CircleIconButton extends StatelessWidget {
             ),
           ),
         ),
-        if (badge != null)
-          Positioned(top: 6, right: 6, child: badge!),
+        if (badge != null) Positioned(top: 6, right: 6, child: badge!),
       ],
     );
   }
@@ -331,8 +469,10 @@ Future<void> showComingSoon(BuildContext context, AppState state) {
     context: context,
     builder: (ctx) => AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: Text(state.t('more_title'),
-          style: Theme.of(context).textTheme.titleLarge),
+      title: Text(
+        state.t('more_title'),
+        style: Theme.of(context).textTheme.titleLarge,
+      ),
       content: Text(state.t('coming_phase')),
       actions: [
         TextButton(

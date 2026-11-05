@@ -29,8 +29,29 @@ DateTime parseIsoDate(String value) {
 /// Nama bulan + tahun ala web (Inggris, mis. "September, 2026").
 String formatBulanTahun(DateTime date) {
   const months = [
-    'January', 'February', 'March', 'April', 'May', 'June', 'July',
-    'August', 'September', 'October', 'November', 'December',
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
   ];
   return '${months[date.month - 1]}, ${date.year}';
+}
+
+/// Format ribuan Indonesia (1.500.000) untuk input nominal.
+String formatThousands(int value) {
+  return NumberFormat('#,##0', 'id_ID').format(value);
+}
+
+/// Parse teks nominal (boleh berisi titik pemisah ribuan) menjadi int.
+int parseNominal(String text) {
+  final digits = text.replaceAll(RegExp(r'[^0-9]'), '');
+  return int.tryParse(digits) ?? 0;
 }

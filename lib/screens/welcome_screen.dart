@@ -20,9 +20,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     final name = _controller.text.trim();
     final state = context.read<AppState>();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(state.t('name_empty'))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(state.t('name_empty'))));
       return;
     }
     setState(() => _busy = true);
@@ -47,8 +47,11 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.account_circle_rounded,
-                  size: 44, color: AppColors.black),
+              const Icon(
+                Icons.account_circle_rounded,
+                size: 44,
+                color: AppColors.black,
+              ),
               const SizedBox(height: 8),
               Text(
                 state.t('welcome_title'),

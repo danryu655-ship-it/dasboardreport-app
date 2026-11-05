@@ -3,10 +3,11 @@ import 'package:provider/provider.dart';
 
 import '../app_state.dart';
 import '../theme.dart';
-import '../widgets.dart';
 import 'dashboard_screen.dart';
 import 'more_screen.dart';
-import 'placeholder_screen.dart';
+import 'report_screen.dart';
+import 'transaction_form_screen.dart';
+import 'wallet_screen.dart';
 
 /// App shell — bottom navigation ala mobile (bukan nav web):
 /// bar gelap mengambang bentuk pil + FAB putih di tengah.
@@ -100,72 +101,82 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
             onGoWallet: () => _goTo(1),
             onGoReport: () => _goTo(2),
           ),
-          const PlaceholderScreen(
-            icon: Icons.account_balance_wallet_rounded,
-            title: 'Wallet',
-            subtitle: 'Riwayat lengkap, filter & grafik',
-          ),
-          const PlaceholderScreen(
-            icon: Icons.pie_chart_rounded,
-            title: 'Report',
-            subtitle: 'Alokasi & rincian kategori',
-          ),
+          const WalletScreen(),
+          const ReportScreen(),
           const MoreScreen(),
         ],
       ),
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        child: Container(
-          height: 60,
-          decoration: BoxDecoration(
-            color: AppColors.navDark,
-            borderRadius: BorderRadius.circular(36),
-            boxShadow: AppShadows.nav,
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _navItem(
-                icon: Icons.home_rounded,
-                label: state.t('nav_home'),
-                index: 0,
-                state: state,
-              ),
-              _navItem(
-                icon: Icons.account_balance_wallet_rounded,
-                label: state.t('nav_wallet'),
-                index: 1,
-                state: state,
-              ),
-              Material(
-                color: AppColors.white,
-                shape: const CircleBorder(),
-                elevation: 4,
-                child: InkWell(
-                  onTap: () => showComingSoon(context, state),
-                  customBorder: const CircleBorder(),
-                  child: const SizedBox(
-                    width: 48,
-                    height: 48,
-                    child: Icon(Icons.add_rounded,
-                        size: 26, color: AppColors.black),
+      // SafeArea bawah: pil navigasi harus selalu tampil utuh di atas
+      // system navigation bar Android (3 tombol maupun gesture bar).
+      // Tanpa ini, di perangkat edge-to-edge pil bisa tertutup tombol sistem.
+      bottomNavigationBar: SafeArea(
+        top: false,
+        bottom: true,
+        left: true,
+        right: true,
+        minimum: const EdgeInsets.only(bottom: 8),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Container(
+            key: const ValueKey('bottomNavPill'),
+            height: 60,
+            decoration: BoxDecoration(
+              color: AppColors.navDark,
+              borderRadius: BorderRadius.circular(36),
+              boxShadow: AppShadows.nav,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _navItem(
+                  icon: Icons.home_rounded,
+                  label: state.t('nav_home'),
+                  index: 0,
+                  state: state,
+                ),
+                _navItem(
+                  icon: Icons.account_balance_wallet_rounded,
+                  label: state.t('nav_wallet'),
+                  index: 1,
+                  state: state,
+                ),
+                Material(
+                  color: AppColors.white,
+                  shape: const CircleBorder(),
+                  elevation: 4,
+                  child: InkWell(
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const TransactionFormScreen(),
+                      ),
+                    ),
+                    customBorder: const CircleBorder(),
+                    child: const SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: Icon(
+                        Icons.add_rounded,
+                        size: 26,
+                        color: AppColors.black,
+                      ),
+                    ),
                   ),
                 ),
-              ),
-              _navItem(
-                icon: Icons.pie_chart_rounded,
-                label: state.t('nav_report'),
-                index: 2,
-                state: state,
-              ),
-              _navItem(
-                icon: Icons.hexagon_rounded,
-                label: state.t('nav_more'),
-                index: 3,
-                state: state,
-              ),
-            ],
+                _navItem(
+                  icon: Icons.pie_chart_rounded,
+                  label: state.t('nav_report'),
+                  index: 2,
+                  state: state,
+                ),
+                _navItem(
+                  icon: Icons.hexagon_rounded,
+                  label: state.t('nav_more'),
+                  index: 3,
+                  state: state,
+                ),
+              ],
+            ),
           ),
         ),
       ),

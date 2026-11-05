@@ -37,9 +37,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final state = context.read<AppState>();
     final newName = _editNameController.text.trim();
     if (newName.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(state.t('name_empty'))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(state.t('name_empty'))));
       return;
     }
     if (newName == state.activeProfile) {
@@ -47,9 +47,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return;
     }
     if (state.profiles.contains(newName)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(state.t('name_exists'))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(state.t('name_exists'))));
       return;
     }
     final ok = await state.renameActiveProfile(newName);
@@ -66,15 +66,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final state = context.read<AppState>();
     final name = _newNameController.text.trim();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(state.t('name_empty'))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(state.t('name_empty'))));
       return;
     }
     if (state.profiles.contains(name)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(state.t('name_exists'))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(state.t('name_exists'))));
       return;
     }
     await state.createProfile(name);
@@ -141,56 +141,56 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Text(
               state.t('saved_profiles'),
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
             ),
             const SizedBox(height: 8),
-            ...state.profiles.map(
-              (name) {
-                final isActive = name == state.activeProfile;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Material(
-                    color: AppColors.gray,
+            ...state.profiles.map((name) {
+              final isActive = name == state.activeProfile;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Material(
+                  color: AppColors.gray,
+                  borderRadius: BorderRadius.circular(14),
+                  child: InkWell(
+                    onTap: () async {
+                      await state.switchProfile(name);
+                      if (context.mounted) Navigator.of(context).pop();
+                    },
                     borderRadius: BorderRadius.circular(14),
-                    child: InkWell(
-                      onTap: () async {
-                        await state.switchProfile(name);
-                        if (context.mounted) Navigator.of(context).pop();
-                      },
-                      borderRadius: BorderRadius.circular(14),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 15, vertical: 13),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(14),
-                          border: isActive
-                              ? Border.all(
-                                  color: AppColors.black, width: 2)
-                              : null,
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                name,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleSmall,
-                              ),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 15,
+                        vertical: 13,
+                      ),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(14),
+                        border: isActive
+                            ? Border.all(color: AppColors.black, width: 2)
+                            : null,
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              name,
+                              style: Theme.of(context).textTheme.titleSmall,
                             ),
-                            if (isActive)
-                              const Icon(Icons.check_rounded,
-                                  color: AppColors.green, size: 18),
-                          ],
-                        ),
+                          ),
+                          if (isActive)
+                            const Icon(
+                              Icons.check_rounded,
+                              color: AppColors.green,
+                              size: 18,
+                            ),
+                        ],
                       ),
                     ),
                   ),
-                );
-              },
-            ),
+                ),
+              );
+            }),
             const SizedBox(height: 8),
             TextField(
               controller: _newNameController,
