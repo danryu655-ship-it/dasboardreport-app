@@ -43,8 +43,7 @@ jobs:
         run: >
           flutter build apk --debug
           --dart-define=SUPABASE_URL=${{ secrets.https://nbyhscsladjdmwzaomit.supabase.co/rest/v1/ }}
-          --dart-define=SUPABASE_ANON_KEY=${{ secrets.sb_publishable_uh-3jdoOGCZQyF5iMJJQ3A_sgf-KuLp
- }}
+          --dart-define=SUPABASE_ANON_KEY=${{ secrets.sb_publishable_uh-3jdoOGCZQyF5iMJJQ3A_sgf-KuLp }}
           --dart-define=SHEETS_WEBAPP_URL=${{ secrets.https://script.google.com/macros/s/AKfycbwpqwJpcCWS5D-YDRNvDm5Ky7dy6tHSSnJDhZH4oCOjOs14pUZKdEd-jLSMJs1wcU7v/exec }}
 
 
