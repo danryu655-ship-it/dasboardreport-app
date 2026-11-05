@@ -1,0 +1,58 @@
+name: Build APK (debug)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Restore binary assets
+        run: |
+          set -e
+          for f in assets/icon-512x512.png assets/icon-192x192.png assets/logo.png android/app/src/main/res/mipmap-mdpi/ic_launcher.png android/app/src/main/res/mipmap-hdpi/ic_launcher.png android/app/src/main/res/mipmap-xhdpi/ic_launcher.png android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png android/gradle/wrapper/gradle-wrapper.jar; do
+            base64 -d "$f.b64" > "$f"
+            rm "$f.b64"
+          done
+          ls -la android/gradle/wrapper/ assets/
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter 3.35.7
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.7'
+          channel: stable
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build debug APK
+        run: flutter build apk --debug
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+
+      - name: Create release with APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: debug-2.9.31-${{ github.run_number }}
+          name: DasboardReport 2.9.31 debug APK (build ${{ github.run_number }})
+          files: build/app/outputs/flutter-apk/app-debug.apk
+          fail_on_unmatched_files: true
