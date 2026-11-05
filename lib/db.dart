@@ -1,0 +1,210 @@
+import 'package:path/path.dart' as p;
+import 'package:sqflite/sqflite.dart';
+
+import 'models.dart';
+
+/// Lapisan SQLite — cerminan localStorage web app (per profil).
+/// v1: 100% lokal, tanpa panggilan network apa pun.
+class DatabaseHelper {
+  DatabaseHelper._();
+  static final DatabaseHelper instance = DatabaseHelper._();
+
+  static const _dbName = 'dasboardreport.db';
+  static const _dbVersion = 1;
+
+  Database? _db;
+
+  Future<Database> get database async {
+    _db ??= await _init();
+    return _db!;
+  }
+
+  Future<Database> _init() async {
+    final dir = await getDatabasesPath();
+    return openDatabase(
+      p.join(dir, _dbName),
+      version: _dbVersion,
+      onCreate: (db, version) async {
+        await db.execute('''
+          CREATE TABLE profiles (
+            name TEXT PRIMARY KEY
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE transactions (
+            id INTEGER PRIMARY KEY,
+            profile TEXT NOT NULL,
+            jenis TEXT NOT NULL,
+            tanggal TEXT NOT NULL,
+            kategori TEXT NOT NULL,
+            investasiSub TEXT NOT NULL DEFAULT '',
+            cryptoToken TEXT NOT NULL DEFAULT '',
+            metodePembayaran TEXT NOT NULL DEFAULT 'Cash',
+            detailBank TEXT NOT NULL DEFAULT '',
+            tujuanBank TEXT NOT NULL DEFAULT '',
+            keterangan TEXT NOT NULL,
+            nominal INTEGER NOT NULL,
+            buktiPath TEXT NOT NULL DEFAULT ''
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE bills (
+            id INTEGER PRIMARY KEY,
+            profile TEXT NOT NULL,
+            nama TEXT NOT NULL,
+            nominal INTEGER NOT NULL,
+            tanggal TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'belum'
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE debts (
+            id INTEGER PRIMARY KEY,
+            profile TEXT NOT NULL,
+            creatorName TEXT NOT NULL DEFAULT '',
+            partnerName TEXT NOT NULL,
+            jenis TEXT NOT NULL,
+            tipeTempo TEXT NOT NULL DEFAULT 'tanpa_tempo',
+            tenorBulan INTEGER,
+            cicilanKe INTEGER,
+            tanggal TEXT NOT NULL,
+            nominal INTEGER NOT NULL,
+            keterangan TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'belum',
+            syncCode TEXT NOT NULL DEFAULT '',
+            buktiPath TEXT NOT NULL DEFAULT ''
+          )
+        ''');
+        await db.execute('''
+          CREATE TABLE activity_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            profile TEXT NOT NULL,
+            waktu TEXT NOT NULL,
+            deskripsi TEXT NOT NULL
+          )
+        ''');
+        await db.execute(
+            'CREATE INDEX idx_trx_profile ON transactions(profile, tanggal)');
+        await db.execute('CREATE INDEX idx_bills_profile ON bills(profile)');
+        await db.execute('CREATE INDEX idx_debts_profile ON debts(profile)');
+        await db.execute(
+            'CREATE INDEX idx_logs_profile ON activity_logs(profile, id)');
+      },
+    );
+  }
+
+  // ---------- Profiles ----------
+  Future<List<String>> getProfiles() async {
+    final db = await database;
+    final rows = await db.query('profiles', orderBy: 'rowid ASC');
+    return rows.map((r) => r['name'] as String).toList();
+  }
+
+  Future<void> insertProfile(String name) async {
+    final db = await database;
+    await db.insert('profiles', {'name': name},
+        conflictAlgorithm: ConflictAlgorithm.ignore);
+  }
+
+  /// Ganti nama profil: pindahkan semua baris data profil lama ke nama baru.
+  /// (Cerminan simpanEditNamaProfil() di web.)
+  Future<void> renameProfile(String oldName, String newName) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.update('profiles', {'name': newName},
+          where: 'name = ?', whereArgs: [oldName]);
+      for (final table in ['transactions', 'bills', 'debts', 'activity_logs']) {
+        await txn.update(table, {'profile': newName},
+            where: 'profile = ?', whereArgs: [oldName]);
+      }
+    });
+  }
+
+  // ---------- Transactions ----------
+  Future<List<AppTransaction>> getTransactions(String profile) async {
+    final db = await database;
+    final rows = await db.query('transactions',
+        where: 'profile = ?', whereArgs: [profile], orderBy: 'tanggal DESC, id DESC');
+    return rows.map(AppTransaction.fromMap).toList();
+  }
+
+  Future<void> insertTransaction(AppTransaction t) async {
+    final db = await database;
+    await db.insert('transactions', t.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> deleteTransaction(int id) async {
+    final db = await database;
+    await db.delete('transactions', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // ---------- Bills ----------
+  Future<List<Bill>> getBills(String profile) async {
+    final db = await database;
+    final rows = await db.query('bills',
+        where: 'profile = ?', whereArgs: [profile], orderBy: 'tanggal ASC, id ASC');
+    return rows.map(Bill.fromMap).toList();
+  }
+
+  Future<void> insertBill(Bill b) async {
+    final db = await database;
+    await db.insert('bills', b.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> updateBill(Bill b) async {
+    final db = await database;
+    await db.update('bills', b.toMap(), where: 'id = ?', whereArgs: [b.id]);
+  }
+
+  Future<void> deleteBill(int id) async {
+    final db = await database;
+    await db.delete('bills', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // ---------- Debts ----------
+  Future<List<Debt>> getDebts(String profile) async {
+    final db = await database;
+    final rows = await db.query('debts',
+        where: 'profile = ?', whereArgs: [profile], orderBy: 'tanggal ASC, id ASC');
+    return rows.map(Debt.fromMap).toList();
+  }
+
+  Future<void> insertDebt(Debt d) async {
+    final db = await database;
+    await db.insert('debts', d.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> updateDebt(Debt d) async {
+    final db = await database;
+    await db.update('debts', d.toMap(), where: 'id = ?', whereArgs: [d.id]);
+  }
+
+  Future<void> deleteDebt(int id) async {
+    final db = await database;
+    await db.delete('debts', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // ---------- Activity logs (maks 50 per profil, seperti web) ----------
+  Future<List<ActivityLog>> getLogs(String profile) async {
+    final db = await database;
+    final rows = await db.query('activity_logs',
+        where: 'profile = ?', whereArgs: [profile], orderBy: 'id DESC', limit: 50);
+    return rows.map(ActivityLog.fromMap).toList();
+  }
+
+  Future<void> insertLog(ActivityLog log) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.insert('activity_logs', log.toMap());
+      // Jaga maks 50 entri: hapus yang paling lama.
+      await txn.rawDelete(
+        'DELETE FROM activity_logs WHERE profile = ? AND id NOT IN '
+        '(SELECT id FROM activity_logs WHERE profile = ? ORDER BY id DESC LIMIT 50)',
+        [log.profile, log.profile],
+      );
+    });
+  }
+}

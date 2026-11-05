@@ -1,0 +1,37 @@
+name: dasboardreport
+description: "DasboardReport - Aplikasi keuangan pribadi (versi Android native, Flutter)."
+publish_to: 'none'
+version: 2.9.31+1
+
+environment:
+  sdk: ^3.9.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  google_fonts: ^6.2.1
+  sqflite: ^2.4.1
+  path: ^1.9.0
+  shared_preferences: ^2.3.3
+  provider: ^6.1.2
+  intl: ^0.20.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.3
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/logo.png
+    - assets/icon-192x192.png
+    - assets/icon-512x512.png
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/icon-512x512.png"
+  min_sdk_android: 21
