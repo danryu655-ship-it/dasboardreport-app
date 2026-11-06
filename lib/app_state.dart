@@ -427,6 +427,149 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Satu seri utang/piutang cicilan — keputusan user 2026-11-06
+  /// ("hapus satu seri sekaligus").
+  ///
+  /// Identitas seri BUKAN syncCode: baik web maupun aplikasi selama ini
+  /// memberi kode BARU di tiap cicilan (web: `sync_code` baru saat buat
+  /// cicilan berikutnya; aplikasi: `createNextInstallment` memanggil
+  /// `_newSyncCode()`), dan baris pertama dari form punya syncCode '' —
+  /// jadi pengelompokan berdasarkan kode tidak pernah menyatukan satu
+  /// seri. Yang benar-benar sama di semua cicilan satu seri adalah
+  /// identitas pinjaman: profil, pihak, jenis, tenor, nominal,
+  /// keterangan, dan tipeTempo 'cicilan'. Baris tanpa tempo selalu
+  /// seri berisi dirinya sendiri.
+  ///
+  /// Batasan yang disengaja: dua pinjaman cicilan yang identik persis
+  /// (orang, jenis, tenor, nominal, dan keterangan sama) dianggap satu
+  /// seri — dialog konfirmasi menampilkan jumlah baris + total nominal
+  /// sebagai pengaman terakhir sebelum hapus.
+  static List<Debt> seriesOf(List<Debt> all, Debt target) {
+    if (target.tipeTempo != 'cicilan') return [target];
+    return all
+        .where(
+          (d) =>
+              d.tipeTempo == 'cicilan' &&
+              d.profile == target.profile &&
+              d.partnerName == target.partnerName &&
+              d.jenis == target.jenis &&
+              d.tenorBulan == target.tenorBulan &&
+              d.nominal == target.nominal &&
+              d.keterangan == target.keterangan,
+        )
+        .toList();
+  }
+
+  /// Seri dari satu baris (dalam daftar profil aktif).
+  List<Debt> debtSeriesOf(Debt debt) => seriesOf(debts, debt);
+
+  /// Hapus SATU SERI sekaligus: semua baris seri (aktif + sudah lunas)
+  /// dihapus lokal, dan tiap baris masuk antrean sync sebagai 'delete'
+  /// sehingga masing-masing mendapat tombstone sendiri di `sync_deletes`
+  /// saat push (tidak ada baris seri yang tertinggal di server).
+  /// Mengembalikan jumlah baris yang dihapus (0 bila id tidak ditemukan).
+  Future<int> deleteDebtSeries(int id) async {
+    final target = debts.where((d) => d.id == id).firstOrNull;
+    if (target == null) return 0;
+    final series = debtSeriesOf(target);
+    for (final d in series) {
+      await DatabaseHelper.instance.deleteDebt(d.id);
+      await SyncService.instance.recordChange('debts', d.id, 'delete', {
+        'id': d.id,
+      });
+    }
+    await addLog(
+      t('debt_log_deleted_series', {
+        'jenis': target.jenis,
+        'name': target.partnerName,
+        'n': '${series.length}',
+      }),
+    );
+    await _loadProfileData();
+    notifyListeners();
+    return series.length;
+  }
+
+  // ---------- Impor Excel (laporan user 2026-11-06) ----------
+  /// Impor batch dari file Excel/CSV: setiap baris draft (id 0 dari parser)
+  /// mendapat id BARU — file ekspor tidak membawa id, dan id baru tidak
+  /// pernah menabrak id yang sudah ada. Tiap baris masuk antrean sync
+  /// seperti data biasa (upsert). Mengembalikan jumlah baris yang diimpor.
+  Future<int> importTransactions(List<AppTransaction> drafts) async {
+    if (drafts.isEmpty) return 0;
+    var nextId = _nextFreshId(transactions.map((t) => t.id));
+    var count = 0;
+    for (final d in drafts) {
+      final row = AppTransaction(
+        id: nextId++,
+        profile: activeProfile ?? '',
+        jenis: d.jenis,
+        tanggal: d.tanggal,
+        kategori: d.kategori,
+        metodePembayaran: d.metodePembayaran,
+        keterangan: d.keterangan,
+        nominal: d.nominal,
+      );
+      await DatabaseHelper.instance.insertTransaction(row);
+      await SyncService.instance.recordChange(
+        'transactions',
+        row.id,
+        'upsert',
+        row.toMap(),
+      );
+      count++;
+    }
+    await addLog(t('import_log_trx', {'n': '$count'}));
+    await _loadProfileData();
+    notifyListeners();
+    return count;
+  }
+
+  Future<int> importDebts(List<Debt> drafts) async {
+    if (drafts.isEmpty) return 0;
+    var nextId = _nextFreshId(debts.map((d) => d.id));
+    var count = 0;
+    for (final d in drafts) {
+      final row = Debt(
+        id: nextId++,
+        profile: activeProfile ?? '',
+        creatorName: activeProfile ?? '',
+        partnerName: d.partnerName,
+        jenis: d.jenis,
+        tipeTempo: 'tanpa_tempo',
+        tenorBulan: null,
+        cicilanKe: null,
+        tanggal: d.tanggal,
+        nominal: d.nominal,
+        keterangan: d.keterangan,
+        status: d.status,
+        syncCode: '',
+      );
+      await DatabaseHelper.instance.insertDebt(row);
+      await SyncService.instance.recordChange(
+        'debts',
+        row.id,
+        'upsert',
+        row.toMap(),
+      );
+      count++;
+    }
+    await addLog(t('import_log_debt', {'n': '$count'}));
+    await _loadProfileData();
+    notifyListeners();
+    return count;
+  }
+
+  /// Id segar untuk impor batch: lebih besar dari "sekarang" dan dari semua
+  /// id yang sudah ada, supaya tidak pernah menabrak baris lama.
+  int _nextFreshId(Iterable<int> existing) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final maxId = existing.isEmpty
+        ? 0
+        : existing.reduce((a, b) => a > b ? a : b);
+    return now > maxId ? now : maxId + 1;
+  }
+
   /// Selesaikan utang/piutang — cerminan tandaiSelesaiPiutang() di web:
   /// buat transaksi otomatis (piutang menjadi pemasukan "Pelunasan Piutang",
   /// utang menjadi pengeluaran "Pelunasan Hutang", kategori Lainnya, Cash,
@@ -488,7 +631,10 @@ class AppState extends ChangeNotifier {
   }
 
   /// Buat cicilan berikutnya otomatis (tanggal +1 bulan, cicilan_ke+1,
-  /// sync code baru) — cerminan web saat pengguna menjawab "Ya".
+  /// kode seri diwarisi dari induk) — cerminan web saat pengguna
+  /// menjawab "Ya". Sejak 2026-11-06 cicilan baru MEWARISI syncCode induk
+  /// (bukan kode baru) supaya satu seri punya satu kode; bila induk
+  /// belum punya kode, satu kode baru dibuat dan diisi ke induk juga.
   Future<void> createNextInstallment(int settledId) async {
     final debt = debts.where((d) => d.id == settledId).firstOrNull;
     if (debt == null) return;
@@ -497,6 +643,33 @@ class AppState extends ChangeNotifier {
     if (nextKe > (debt.tenorBulan ?? 0)) return;
     final nextDate = parseIsoDate(debt.tanggal);
     final due = DateTime(nextDate.year, nextDate.month + 1, nextDate.day);
+    var seriesCode = debt.syncCode;
+    if (seriesCode.isEmpty) {
+      seriesCode = _newSyncCode();
+      final healed = Debt(
+        id: debt.id,
+        profile: debt.profile,
+        creatorName: debt.creatorName,
+        partnerName: debt.partnerName,
+        jenis: debt.jenis,
+        tipeTempo: debt.tipeTempo,
+        tenorBulan: debt.tenorBulan,
+        cicilanKe: debt.cicilanKe,
+        tanggal: debt.tanggal,
+        nominal: debt.nominal,
+        keterangan: debt.keterangan,
+        status: debt.status,
+        syncCode: seriesCode,
+        buktiPath: debt.buktiPath,
+      );
+      await DatabaseHelper.instance.updateDebt(healed);
+      await SyncService.instance.recordChange(
+        'debts',
+        healed.id,
+        'upsert',
+        healed.toMap(),
+      );
+    }
     final next = Debt(
       id: DateTime.now().millisecondsSinceEpoch + 1,
       profile: debt.profile,
@@ -510,7 +683,7 @@ class AppState extends ChangeNotifier {
       nominal: debt.nominal,
       keterangan: debt.keterangan,
       status: 'belum',
-      syncCode: _newSyncCode(),
+      syncCode: seriesCode,
       buktiPath: debt.buktiPath,
     );
     await DatabaseHelper.instance.insertDebt(next);

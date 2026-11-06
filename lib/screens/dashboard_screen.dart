@@ -61,13 +61,19 @@ class DashboardScreen extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
+      // SafeArea (bottom: true) agar isi bawah sheet tidak tertutup system
+      // navigation bar Android — pola yang sama dengan form utang/tagihan
+      // (laporan user 2026-11-06).
       builder: (ctx) => DraggableScrollableSheet(
         initialChildSize: 0.7,
         minChildSize: 0.4,
         maxChildSize: 0.92,
         expand: false,
-        builder: (_, controller) => Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 30),
+        builder: (_, controller) => SafeArea(
+          bottom: true,
+          minimum: const EdgeInsets.only(bottom: 12),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 30),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -144,6 +150,7 @@ class DashboardScreen extends StatelessWidget {
           ),
         ),
       ),
+      ),
     );
   }
 
@@ -155,27 +162,33 @@ class DashboardScreen extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 30),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.border,
-                  borderRadius: BorderRadius.circular(2),
+      // SafeArea (bottom: true) agar isi bawah sheet tidak tertutup system
+      // navigation bar Android — pola yang sama dengan form utang/tagihan
+      // (laporan user 2026-11-06).
+      builder: (ctx) => SafeArea(
+        bottom: true,
+        minimum: const EdgeInsets.only(bottom: 12),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 30),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              state.t('bills_title'),
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
+              const SizedBox(height: 16),
+              Text(
+                state.t('bills_title'),
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
             const SizedBox(height: 6),
             Text(
               state.t('not_yet_paid'),
@@ -233,6 +246,7 @@ class DashboardScreen extends StatelessWidget {
               ),
           ],
         ),
+      ),
       ),
     );
   }

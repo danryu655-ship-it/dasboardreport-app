@@ -12,6 +12,13 @@ class DatabaseHelper {
   static const _dbName = 'dasboardreport.db';
   static const _dbVersion = 3; // v3 (fase 2): + tabel bug_reports & sync_queue
 
+  /// Jalur database khusus test: bila diisi, `_init()` memakai jalur ini
+  /// (bukan jalur normal). Dipakai test agar tiap file test memakai file DB
+  /// sendiri dan tidak saling mengganggu saat `flutter test` menjalankan
+  /// file secara paralel. null = jalur normal. TIDAK PERNAH diisi di
+  /// kode aplikasi.
+  static String? testDatabasePath;
+
   Database? _db;
 
   Future<Database> get database async {
@@ -20,9 +27,10 @@ class DatabaseHelper {
   }
 
   Future<Database> _init() async {
-    final dir = await getDatabasesPath();
+    final path =
+        testDatabasePath ?? p.join(await getDatabasesPath(), _dbName);
     return openDatabase(
-      p.join(dir, _dbName),
+      path,
       version: _dbVersion,
       onCreate: (db, version) async {
         await _createV1(db);
@@ -228,6 +236,22 @@ class DatabaseHelper {
     await db.delete('transactions', where: 'id = ?', whereArgs: [id]);
   }
 
+  /// Hapus transaksi HANYA bila dibuat sebelum hapusan di Supabase
+  /// (id = ms epoch pembuatan). Penjaga anti-false-delete untuk pull
+  /// tombstone: baris yang dibuat sesudah hapusan adalah data baru dan
+  /// tidak boleh ikut terhapus.
+  Future<void> deleteTransactionIfCreatedBefore(
+    int id,
+    int deletedAtMs,
+  ) async {
+    final db = await database;
+    await db.delete(
+      'transactions',
+      where: 'id = ? AND id < ?',
+      whereArgs: [id, deletedAtMs],
+    );
+  }
+
   // ---------- Bills ----------
   Future<List<Bill>> getBills(String profile) async {
     final db = await database;
@@ -259,6 +283,16 @@ class DatabaseHelper {
     await db.delete('bills', where: 'id = ?', whereArgs: [id]);
   }
 
+  /// Seperti [deleteTransactionIfCreatedBefore], untuk tagihan.
+  Future<void> deleteBillIfCreatedBefore(int id, int deletedAtMs) async {
+    final db = await database;
+    await db.delete(
+      'bills',
+      where: 'id = ? AND id < ?',
+      whereArgs: [id, deletedAtMs],
+    );
+  }
+
   // ---------- Debts ----------
   Future<List<Debt>> getDebts(String profile) async {
     final db = await database;
@@ -288,6 +322,16 @@ class DatabaseHelper {
   Future<void> deleteDebt(int id) async {
     final db = await database;
     await db.delete('debts', where: 'id = ?', whereArgs: [id]);
+  }
+
+  /// Seperti [deleteTransactionIfCreatedBefore], untuk utang/piutang.
+  Future<void> deleteDebtIfCreatedBefore(int id, int deletedAtMs) async {
+    final db = await database;
+    await db.delete(
+      'debts',
+      where: 'id = ? AND id < ?',
+      whereArgs: [id, deletedAtMs],
+    );
   }
 
   // ---------- Activity logs (maks 50 per profil, seperti web) ----------

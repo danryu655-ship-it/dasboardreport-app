@@ -13,8 +13,12 @@ import 'supabase_config.dart';
 /// - Dipicu manual oleh pengguna (tombol backup di layar Ekspor).
 /// - Mengirim SATU payload JSON (semua tab sekaligus) ke Web App Apps Script
 ///   yang URL-nya diisi via `--dart-define=SHEETS_WEBAPP_URL=...`.
-/// - Apps Script menulis ulang tiap tab sesuai kolom di bawah (header baris 1
-///   sudah dibekukan di Sheet; skrip menulis ulang header + baris).
+/// - ARSIP (sejak 2026-11-06): Apps Script TIDAK PERNAH menghapus baris.
+///   Baris baru ditambahkan di akhir, baris yang sudah ada diperbarui di
+///   tempat (cocok kunci), baris lama yang tidak ada di payload tetap
+///   tersimpan sebagai arsip — termasuk catatan yang sudah dihapus di
+///   aplikasi. Aturan arsip ini diimplementasikan di Apps Script dan
+///   dicerminkan sebagai [mergeArchiveRows] di sini (diuji sebagai spek).
 /// - Bila URL belum dikonfigurasi, [backup] mengembalikan
 ///   [SheetsBackupResult.notConfigured] dan TIDAK mengirim apa pun.
 /// - Tidak ada sinkronisasi dua arah: Sheets hanya menerima salinan data
@@ -166,6 +170,55 @@ class SheetsBackup {
         'Log Aktivitas': logs.map(mapLog).toList(),
       },
     };
+  }
+
+  // ---------- Aturan arsip (append-only) ----------
+
+  /// Kolom kunci tiap tab untuk pencocokan baris di arsip.
+  /// Profil dikunci 'nama' (id Profil hanya nomor urut yang bisa dipakai
+  /// ulang bila profil dihapus lalu dibuat lagi); tab lain dikunci 'id'
+  /// (id numerik unik: ms epoch untuk transaksi/tagihan/utang, AUTOINCREMENT
+  /// untuk log — unik dalam satu perangkat).
+  static const Map<String, String> archiveKeyColumn = {
+    'Profil': 'nama',
+    'Transaksi': 'id',
+    'Tagihan': 'id',
+    'Utang Piutang': 'id',
+    'Log Aktivitas': 'id',
+  };
+
+  /// Gabungkan baris arsip lama ([existing]) dengan baris baru dari payload
+  /// ([incoming]) — implementasi referensi aturan arsip, dicerminkan di
+  /// Apps Script (`mergeTab` di sheets-backup-apps-script.gs).
+  /// Aturan: TIDAK PERNAH menghapus baris.
+  /// - Baris lama yang kuncinya tidak ada di payload: dipertahankan.
+  /// - Baris yang kuncinya ada di payload: diperbarui di tempat.
+  /// - Baris baru: ditambahkan di akhir, sesuai urutan payload.
+  /// Hasil tidak pernah lebih pendek dari [existing].
+  static List<Map<String, dynamic>> mergeArchiveRows({
+    required String tab,
+    required List<Map<String, dynamic>> existing,
+    required List<Map<String, dynamic>> incoming,
+  }) {
+    final keyColumn = archiveKeyColumn[tab] ?? 'id';
+    final merged = <Map<String, dynamic>>[
+      for (final row in existing) Map<String, dynamic>.from(row),
+    ];
+    final indexByKey = <String, int>{};
+    for (var i = 0; i < merged.length; i++) {
+      indexByKey['${merged[i][keyColumn]}'] = i;
+    }
+    for (final row in incoming) {
+      final key = '${row[keyColumn]}';
+      final idx = indexByKey[key];
+      if (idx != null) {
+        merged[idx] = Map<String, dynamic>.from(row);
+      } else {
+        indexByKey[key] = merged.length;
+        merged.add(Map<String, dynamic>.from(row));
+      }
+    }
+    return merged;
   }
 
   /// Kirim payload ke Apps Script. Mengembalikan hasil (sukses/gagal/alasan).

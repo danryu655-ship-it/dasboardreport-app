@@ -192,3 +192,57 @@ alasan). Hapus override saat Flutter dinaikkan. Setelah override:
    lunasi utang/cicilan, kalender, Wrapped, export PDF/CSV, lapor bug,
    dan pastikan pil navigasi bawah tampil utuh (tidak tertutup tombol
    sistem). Bila sync aktif, cek layar Lainnya → Sinkronisasi Cloud.
+
+---
+
+## Perubahan 2026-11-06 — hapus dua arah + arsip Sheets + 3 masukan uji HP
+
+Keputusan user ~02:12 WIB: hapus dua arah untuk data live + backup Sheets
+jadi arsip sejati. Plus 3 masukan dari pengujian APK Fase 2 di HP (~02:18
+WIB). Detail lengkap: `SYNC_DELETE_RESULT.md`.
+
+### Yang berubah
+
+- **Hapus dua arah (live):** tabel tombstone `sync_deletes` di Supabase
+  (+ RLS) — push mendorong hapusan + tombstone, pull menghapus baris lokal
+  yang memang dihapus di server (penjaga `rowId < deletedAtMs`, anti
+  false-delete). Hanya transaksi/tagihan/utang. SQLite lokal tetap v3.
+- **Arsip Sheets:** Apps Script ditulis ulang — append-only, tidak pernah
+  `clearContents`, tidak pernah menghapus baris; catatan yang dihapus di
+  aplikasi tetap tersimpan di Sheet sebagai arsip.
+- **Bug "Selesai" (Hutang Piutang):** tombol Hapus kini tampil di semua
+  baris termasuk yang sudah lunas (paritas web) — cicilan lunas yang
+  tadinya tidak bisa dihapus kini bisa dihapus dan langsung hilang dari
+  "Selesai". Hapus tetap per baris (bukan berantai satu seri) — keputusan
+  hapus seri masih terbuka untuk user.
+- **Bug Simpan tertutup nav bar:** SafeArea di 4 bottom sheet (form
+  Utang/Piutang, form Tagihan, detail bulan, tagihan belum bayar).
+- **Fitur baru Import Excel:** menu di Lainnya tepat di bawah "Ekspor
+  Excel" — unduh template (kolom sama persis dengan ekspor), pilih file
+  `.csv`/`.xlsx`, validasi + pratinjau, impor ke database lokal (masuk
+  antrean sync). Cakupan: transaksi + utang/piutang.
+
+### Verifikasi
+
+- `flutter analyze`: **No issues found.**
+- `flutter test`: **72 test lolos** (termasuk 14 sync_delete, 35 import,
+  5 debt_delete, 5 bottom_sheet SafeArea).
+- Package `excel` 4.0.6 dihapus (tidak kompatibel dengan `archive` 4.x);
+  XLSX dibaca pembaca minimal sendiri (`xlsx_reader.dart`).
+
+### Langkah berikutnya untuk user (setelah langkah Fase 2 yang tertunda)
+
+1. **Jalankan migrasi SQL** `docs/supabase-migration-2026-11-06-sync-deletes.sql`
+   di Supabase SQL Editor (tabel `sync_deletes` + RLS) — lihat
+   `docs/supabase-setup.md` Langkah 1b.
+2. **Deploy ulang Apps Script** yang baru (`docs/sheets-backup-apps-script.gs`)
+   — versi arsip; bila URL Web App berubah, update secret
+   `SHEETS_WEBAPP_URL` di GitHub.
+3. **Upload kode + rebuild via workflow** seperti Fase 2 (file di
+   `~/workspace/dasboardreport-gh/` sudah disinkronkan; workflow TIDAK
+   diubah; JANGAN timpa `gradle-wrapper.properties`/`gradle.properties`
+   di repo dengan versi lama dari folder kerja — versi repo sudah yang
+   benar).
+4. Masih tertunda dari sebelumnya: **rotasi anon key Supabase yang bocor**
+   di riwayat git + deploy ulang Apps Script lama (lihat Fase 2) — lakukan
+   sebelum/saat rebuild agar APK memakai key/URL baru.

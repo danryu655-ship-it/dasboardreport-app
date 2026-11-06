@@ -82,12 +82,41 @@ DAN di `tabColumns` + fungsi map (jangan ubah nama kolom yang sudah ada).
    URL/key di repo.
 5. Uji: tekan Backup di aplikasi (layar Ekspor) → buka spreadsheet → tab
    terisi. Bila muncul error, periksa **Executions** di Apps Script.
+   PENTING: versi Apps Script ini adalah versi ARSIP (2026-11-06) —
+   bila Web App lama (versi snapshot/clearContents) masih ter-deploy,
+   deploy ulang dengan file `.gs` terbaru ini, lalu perbarui secret
+   `SHEETS_WEBAPP_URL` bila URL-nya berubah.
+
+## Aturan arsip (sejak 2026-11-06) — TIDAK PERNAH menghapus baris
+
+Setiap backup MENGGABUNGKAN payload ke isi tab yang sudah ada, bukan
+menimpa:
+
+- Baris lama yang kuncinya tidak ada di payload: **dipertahankan**.
+- Baris yang kuncinya ada di payload: **diperbarui di tempat** (nilai baru
+  mengganti nilai lama pada baris yang sama).
+- Baris baru: **ditambahkan di akhir** tab.
+- Catatan yang sudah dihapus di aplikasi **tetap tersimpan di Sheet**
+  sebagai arsip — hapusan di aplikasi tidak menghapus baris Sheet.
+- Kolom kunci pencocokan: `nama` untuk tab Profil (id Profil hanya nomor
+  urut yang bisa dipakai ulang bila profil dihapus lalu dibuat lagi),
+  `id` untuk tab lain. Aturan ini diimplementasikan di
+  `sheets-backup-apps-script.gs` (`mergeTab`) dan dicerminkan di aplikasi
+  (`SheetsBackup.mergeArchiveRows`, `lib/sync/sheets_backup.dart`) yang
+  diuji di `test/sync_delete_test.dart`.
+- Respons Web App per tab sekarang `{ kept, updated, added }` (bukan lagi
+  jumlah baris tertulis): kept = baris lama yang dipertahankan (termasuk
+  yang diperbarui), updated = baris lama yang diganti nilainya, added =
+  baris baru.
 
 ## Batasan yang disadari
 
-- Backup menimpa isi tab (snapshot penuh), bukan delta — sederhana dan aman
-  untuk arsip; riwayat antar-backup tidak dipertahankan di Sheet.
+- Arsip hanya menambah/memperbarui, tidak pernah menghapus — Sheet bisa
+  tumbuh terus; baris arsip lama tidak dibersihkan otomatis.
 - Tidak ada restore otomatis dari Sheet ke aplikasi (satu arah: app → Sheet).
 - Foto bukti tidak ikut terkirim (tetap lokal).
 - Kolom `dibuat_pada` / `dibayar_pada` dikirim kosong karena aplikasi tidak
   mencatat waktu pembuatan/pembayaran itu (hanya tanggal transaksi/status).
+- Backup dari dua perangkat berbeda bisa bertabrakan pada `id` laporan bug
+  (AUTOINCREMENT lokal per perangkat) — baris dengan id sama akan saling
+  menimpa di tempat, sama seperti sebelum perubahan arsip.

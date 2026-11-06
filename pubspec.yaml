@@ -25,11 +25,17 @@ dependencies:
   # model ter-link statis, offline sejak install, tanpa API key/server).
   # v0.16.0 = terakhir yang cocok Flutter 3.35.7 (0.17.x butuh Flutter 3.44+).
   google_mlkit_text_recognition: ^0.16.0
+  file_picker: ^11.0.3
+  xml: ^6.6.1
+  archive: ^4.6.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  # Hanya untuk test: menjalankan sqflite di flutter test (VM) tanpa
+  # platform channel. Tidak ikut ke APK (dev_dependency).
+  sqflite_common_ffi: ^2.3.6
 
 dependency_overrides:
   # pdf 3.12.0 membatasi archive <4.1.0, tapi image 4.11.0 (dipakai pdf)

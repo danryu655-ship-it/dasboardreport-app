@@ -3,12 +3,17 @@
 -- Jalankan SEKALI di SQL Editor proyek Supabase (setelah proyek dibuat).
 -- JANGAN jalankan dari aplikasi; file ini hanya dokumentasi setup.
 -- Proyek (terverifikasi 2026-11-06): https://nbyhscsladjdmwzaomit.supabase.co
--- Status saat file ini ditulis: skema public MASIH KOSONG (GET /rest/v1/
--- hanya mengembalikan 2 path; GET /rest/v1/transactions -> 404).
+-- Status: skema dasar SUDAH dibuat user (2026-11-06, tabel ada dan
+-- terverifikasi via REST). File ini = skema lengkap termasuk tabel
+-- `sync_deletes` (hapus dua arah, 2026-11-06) — proyek baru bisa jalankan
+-- file ini sekali jalan; proyek yang sudah ada jalankan MIGRASI saja.
 -- Setelah SQL ini dijalankan, verifikasi dengan:
 --   python3 ~/workspace/custom-connectors/custom.supabase/bin/sb_rest.py /rest/v1/
 -- (harus muncul path /transactions, /bills, /debts, /profiles, /wallets,
---  /bug_reports) dan GET /rest/v1/transactions?select=*&limit=1 -> [].
+--  /bug_reports, /sync_deletes) dan GET /rest/v1/transactions?select=*&limit=1 -> [].
+-- Bila skema LAMA (tanpa sync_deletes) sudah dijalankan sebelumnya, jangan
+-- jalankan ulang file ini dari nol — jalankan MIGRASI di
+-- docs/supabase-migration-2026-11-06-sync-deletes.sql saja (idempotent).
 -- Prasyarat di dashboard Supabase: aktifkan provider "Anonymous"
 -- (Authentication → Sign-in providers → Anonymous) agar aplikasi bisa
 -- masuk tanpa login email.
@@ -105,6 +110,31 @@ create table if not exists public.wallets (
   updated_at timestamptz not null default now()
 );
 
+-- ---------- Tabel: jejak hapusan (tombstone) — hapus dua arah ----------
+-- Sejak 2026-11-06: hapus disinkronkan DUA ARAH. Baris yang dihapus di
+-- server tidak meninggalkan jejak di tabel asalnya, jadi pull tidak bisa
+-- tahu ada yang dihapus — karena itu setiap hapusan yang di-push juga
+-- mencatat satu tombstone di sini (satu baris per hapusan, unik per
+-- pengguna + tabel + id baris). Pull membaca tombstone yang lebih baru dari
+-- last_sync_at dan menghapus baris lokal yang cocok.
+-- - Hanya untuk tabel ber-id numerik ms epoch (transactions, bills,
+--   debts): pull memakai id sebagai waktu pembuatan baris (penjaga
+--   anti-false-delete — baris yang dibuat SESUDAH hapusan tidak dihapus).
+-- - TIDAK untuk profiles (tidak ada hapus profil di UI, hanya rename),
+--   bug_reports (id AUTOINCREMENT bertabrakan antar perangkat; laporan
+--   bug hanya naik), wallets (tidak disinkronkan).
+-- - Tombstone TIDAK PERNAH dihapus (prune): tabel ini satu-satunya bukti
+--   hapusan; ukurannya kecil (satu baris per hapusan) dan tidak memengaruhi
+--   aplikasi (tidak pernah ditampilkan).
+create table if not exists public.sync_deletes (
+  id bigint generated always as identity primary key,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  table_name text not null,
+  row_id bigint not null,
+  row_key text not null default '',
+  deleted_at timestamptz not null default now()
+);
+
 -- ---------- Indeks ----------
 create index if not exists idx_profiles_user
   on public.profiles (user_id);
@@ -114,6 +144,12 @@ create index if not exists idx_bills_user_profile
   on public.bills (user_id, profile);
 create index if not exists idx_debts_user_profile
   on public.debts (user_id, profile);
+-- Tombstone: unik per hapusan (upsert idempotent saat push diulang) dan
+-- cepat dibaca per pengguna + waktu hapusan (pull incremental).
+create unique index if not exists idx_sync_deletes_unique
+  on public.sync_deletes (user_id, table_name, row_id, row_key);
+create index if not exists idx_sync_deletes_user_deleted
+  on public.sync_deletes (user_id, deleted_at);
 
 -- ---------- Row Level Security ----------
 -- Setiap pengguna (auth.uid() dari sesi anonim) hanya bisa melihat dan
@@ -125,6 +161,7 @@ alter table public.bills enable row level security;
 alter table public.debts enable row level security;
 alter table public.wallets enable row level security;
 alter table public.bug_reports enable row level security;
+alter table public.sync_deletes enable row level security;
 
 -- Kebijakan: SELECT / INSERT / UPDATE / DELETE hanya untuk pemilik baris.
 -- (Satu blok per tabel; pola sama untuk keenam tabel.)
@@ -182,6 +219,17 @@ create policy "own rows update" on public.bug_reports
 create policy "own rows delete" on public.bug_reports
   for delete using (auth.uid() = user_id);
 
+-- Tombstone hapusan: kebijakan "own rows" yang sama — satu pengguna tidak
+-- bisa membaca/menulis jejak hapusan pengguna lain.
+create policy "own rows select" on public.sync_deletes
+  for select using (auth.uid() = user_id);
+create policy "own rows insert" on public.sync_deletes
+  for insert with check (auth.uid() = user_id);
+create policy "own rows update" on public.sync_deletes
+  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "own rows delete" on public.sync_deletes
+  for delete using (auth.uid() = user_id);
+
 -- ---------- Catatan ----------
 -- * `id` memakai id lokal (ms epoch) agar upsert dari antrean sync cocok
 --   dengan baris lokal; `updated_at` dipakai untuk pull incremental.
@@ -192,5 +240,8 @@ create policy "own rows delete" on public.bug_reports
 --   daftar namanya disinkronkan lewat tabel `profiles`.
 -- * `wallets` disediakan untuk fitur akun dompet di masa depan; aplikasi
 --   saat ini TIDAK menulis/membaca tabel ini (saldo dihitung dari transaksi).
--- * Hapus (delete) hanya disinkronkan naik (push); pull tidak menghapus
---   baris lokal (lihat SyncService._pullChanges).
+-- * Hapus (delete) disinkronkan DUA ARAH sejak 2026-11-06: push menghapus
+--   baris server + mencatat tombstone di `sync_deletes`; pull membaca
+--   tombstone dan menghapus baris lokal yang cocok (hanya transactions,
+--   bills, debts — lihat komentar tabel sync_deletes). Tanpa tombstone,
+--   pull tidak bisa tahu baris yang dihapus di server.

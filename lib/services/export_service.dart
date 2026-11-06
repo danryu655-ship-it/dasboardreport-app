@@ -15,6 +15,14 @@ import '../models.dart';
 /// Semua file ditulis ke direktori dokumen aplikasi, lalu dibagikan/disimpan
 /// lewat share sheet — tanpa server, tanpa API.
 class ExportService {
+  /// Header CSV ekspor — SATU-SATUNYA sumber kebenaran untuk format CSV.
+  /// Dipakai exportCsv() DAN template Impor Excel (ImportService), supaya
+  /// kolom template sama persis dengan kolom ekspor (laporan user 2026-11-06).
+  static const transactionCsvHeader =
+      'Tanggal,Keterangan,Kategori,Metode,Jenis,Nominal';
+  static const debtCsvHeader =
+      'Tanggal,Partner,Jenis,Nominal,Keterangan,Status';
+
   static Future<File> exportPdf({
     required String profile,
     required String jenis,
@@ -122,7 +130,7 @@ class ExportService {
   }) async {
     final buf = StringBuffer();
     if (jenis == 'utang') {
-      buf.writeln('Tanggal,Partner,Jenis,Nominal,Keterangan,Status');
+      buf.writeln(debtCsvHeader);
       final list =
           debts
               .where((d) => _inRange(parseIsoDate(d.tanggal), from, to))
@@ -144,7 +152,7 @@ class ExportService {
       }
       buf.writeln(_csvRow(['TOTAL', '', '', total.toString(), '', '']));
     } else {
-      buf.writeln('Tanggal,Keterangan,Kategori,Metode,Jenis,Nominal');
+      buf.writeln(transactionCsvHeader);
       final rows = _filtered(transactions, debts, jenis, from, to);
       var total = 0;
       for (final r in rows) {

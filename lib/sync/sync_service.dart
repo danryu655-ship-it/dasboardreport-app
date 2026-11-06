@@ -21,6 +21,13 @@ enum SyncStatus { disabled, idle, syncing, synced, error }
 /// - Bila Supabase terkonfigurasi (URL + anon key via --dart-define) dan ada
 ///   internet, antrean di-push (upsert/delete) ke tabel Supabase, lalu pull
 ///   baris yang berubah sejak sinkronisasi terakhir.
+/// - Hapus DUA ARAH (sejak 2026-11-06): hapusan lokal di-push (baris server
+///   dihapus + tombstone dicatat di tabel `sync_deletes`); pull membaca
+///   tombstone dan menghapus baris lokal yang memang dihapus di Supabase.
+///   Tombstone HANYA untuk tabel ber-id numerik ms epoch (transactions,
+///   bills, debts) — profiles tidak memakai tombstone (tidak ada hapus
+///   profil di UI, hanya rename), bug_reports tidak (id AUTOINCREMENT
+///   bertabrakan antar perangkat; laporan bug hanya naik).
 /// - Auth: anonymous (satu identitas per instalasi). RLS di Supabase
 ///   mengisolasi data per `auth.uid()`. Bila anonymous auth belum diaktifkan
 ///   di proyek Supabase, status menjadi error dan aplikasi tetap jalan lokal.
@@ -53,6 +60,49 @@ class SyncService extends ChangeNotifier {
     'debts',
     'bug_reports',
   ];
+
+  /// Tabel yang memakai tombstone hapusan di `sync_deletes`.
+  /// Syarat: id numerik = ms epoch pembuatan, sehingga pull bisa membedakan
+  /// baris yang dibuat SEBELUM hapusan (harus ikut terhapus) dari baris
+  /// yang dibuat SESUDAH hapusan (data baru, jangan hapus).
+  static const List<String> tombstoneTables = [
+    'transactions',
+    'bills',
+    'debts',
+  ];
+
+  /// Bangun baris tombstone dari satu entri antrean hapusan.
+  /// Mengembalikan null bila tabel tidak memakai tombstone (profiles,
+  /// bug_reports, wallets) — hapusan tabel itu tetap di-push ke server
+  /// seperti biasa, hanya saja tidak meninggalkan jejak untuk pull.
+  /// `deletedAtMs` = waktu hapusan dicatat lokal (createdAt antrean).
+  static Map<String, dynamic>? buildTombstone({
+    required String table,
+    required int rowId,
+    required int deletedAtMs,
+    required String userId,
+  }) {
+    if (!tombstoneTables.contains(table)) return null;
+    return {
+      'table_name': table,
+      'row_id': rowId,
+      'row_key': '',
+      'deleted_at':
+          DateTime.fromMillisecondsSinceEpoch(deletedAtMs).toIso8601String(),
+      'user_id': userId,
+    };
+  }
+
+  /// Penjaga anti-false-delete untuk pull: terapkan tombstone hanya bila
+  /// baris lokal dibuat SEBELUM hapusan (id = ms epoch pembuatan).
+  /// Baris dengan id > deletedAt dibuat sesudah hapusan (data baru atau
+  /// dibuat ulang) — jangan hapus. id == deletedAt (ambiguitas 1 ms)
+  /// juga TIDAK dihapus: lebih aman mempertahankan baris.
+  static bool shouldApplyTombstone({
+    required int rowId,
+    required int deletedAtMs,
+  }) =>
+      rowId < deletedAtMs;
 
   /// Inisialisasi Supabase bila terkonfigurasi. Aman dipanggil kapan saja;
   /// bila tidak terkonfigurasi, langsung menjadi disabled.
@@ -175,6 +225,23 @@ class SyncService extends ChangeNotifier {
               .eq('id', rowId)
               .eq('user_id', _userId!);
         }
+        // Jejak hapusan untuk pull perangkat lain (hapus dua arah).
+        // Idempotent: upsert di (user_id, table_name, row_id, row_key) —
+        // bila push diulang (mis. gagal di tengah jalan), tidak ada
+        // tombstone ganda. Gagal di sini membuat entri antrean tetap ada
+        // dan dicoba lagi pada sync berikutnya.
+        final tombstone = buildTombstone(
+          table: table,
+          rowId: rowId,
+          deletedAtMs: e['createdAt'] as int,
+          userId: _userId!,
+        );
+        if (tombstone != null) {
+          await _client.from('sync_deletes').upsert(
+                tombstone,
+                onConflict: 'user_id,table_name,row_id,row_key',
+              );
+        }
       } else {
         await _client.from(table).upsert(row);
       }
@@ -213,6 +280,43 @@ class SyncService extends ChangeNotifier {
             // menimpa laporan lokal dengan id AUTOINCREMENT yang berbeda.
             break;
         }
+      }
+    }
+    // Hapusan dari perangkat lain: terapkan tombstone (hapus dua arah).
+    await _pullDeletes(since);
+  }
+
+  /// Tarik tombstone hapusan sejak [since] (ISO-8601) dan hapus baris lokal
+  /// yang memang dihapus di Supabase. TIDAK PERNAH menghapus tanpa bukti:
+  /// hanya baris yang cocok dengan satu tombstone (tabel + id) DAN dibuat
+  /// sebelum hapusan yang dihapus. Tombstone untuk tabel yang tidak memakai
+  /// tombstone (profiles, bug_reports, wallets) diabaikan.
+  Future<void> _pullDeletes(String since) async {
+    final tombstones = await _client
+        .from('sync_deletes')
+        .select()
+        .eq('user_id', _userId!)
+        .gt('deleted_at', since);
+    final db = DatabaseHelper.instance;
+    for (final t in tombstones as List) {
+      final map = Map<String, dynamic>.from(t as Map);
+      final table = map['table_name'] as String? ?? '';
+      if (!tombstoneTables.contains(table)) continue;
+      final rowId = (map['row_id'] as num?)?.toInt();
+      final deletedAt = map['deleted_at'] as String?;
+      if (rowId == null || deletedAt == null) continue;
+      final deletedAtMs =
+          DateTime.parse(deletedAt).millisecondsSinceEpoch;
+      if (!shouldApplyTombstone(rowId: rowId, deletedAtMs: deletedAtMs)) {
+        continue;
+      }
+      switch (table) {
+        case 'transactions':
+          await db.deleteTransactionIfCreatedBefore(rowId, deletedAtMs);
+        case 'bills':
+          await db.deleteBillIfCreatedBefore(rowId, deletedAtMs);
+        case 'debts':
+          await db.deleteDebtIfCreatedBefore(rowId, deletedAtMs);
       }
     }
   }

@@ -10,6 +10,7 @@ import 'bug_report_screen.dart';
 import 'calendar_screen.dart';
 import 'debts_screen.dart';
 import 'export_screen.dart';
+import 'import_screen.dart';
 import 'lock_screen.dart';
 import 'profile_screen.dart';
 import 'wrapped_screen.dart';
@@ -201,6 +202,17 @@ class MoreScreen extends StatelessWidget {
                 onTap: () => Navigator.of(
                   context,
                 ).push(MaterialPageRoute(builder: (_) => const ExportScreen())),
+              ),
+              const SizedBox(height: 8),
+              // Import Excel — tepat di bawah Ekspor Excel (laporan user
+              // 2026-11-06): masukkan data dari website DasboardReport.
+              SettingsItem(
+                icon: Icons.upload_file_rounded,
+                iconColor: AppColors.purple,
+                label: state.t('import_excel'),
+                onTap: () => Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const ImportScreen())),
               ),
               const SizedBox(height: 20),
               Container(

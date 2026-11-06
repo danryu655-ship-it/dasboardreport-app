@@ -199,3 +199,47 @@ diinvestigasi, bukan blocker saat ini.
   sheets-backup-apps-script.gs; `test/` receipt_parser_test,
   cloud_config_test, safe_area_nav_test.
 - Hasil lengkap + langkah user: `PHASE2_RESULT.md`.
+
+## Perubahan 2026-11-06 — hapus dua arah + arsip Sheets + 3 masukan uji HP
+
+- Tombstone `sync_deletes` (Supabase) + `_pullDeletes` di sync service;
+  SQLite lokal tetap v3 (tidak ada migrasi lokal). Migrasi:
+  `docs/supabase-migration-2026-11-06-sync-deletes.sql` (idempotent).
+- Apps Script backup ditulis ulang jadi arsip append-only (`mergeTab`,
+  tanpa `clearContents`); perlu deploy ulang + update secret bila URL
+  berubah. `docs/sheets-backup-schema.md` § arsip.
+- Bug "Selesai" Hutang Piutang: tombol Hapus kini tampil di semua baris
+  (paritas web). Bug Simpan tertutup nav bar: SafeArea di 4 bottom sheet
+  (utang/piutang, tagihan, detail bulan, tagihan belum bayar).
+- Fitur Import Excel: `lib/services/import_service.dart`,
+  `lib/services/xlsx_reader.dart`, `lib/screens/import_screen.dart`,
+  menu di `more_screen.dart`, string `import_*` di `strings.dart`.
+- Dependensi: tambah `file_picker ^11.0.3`, `xml ^6.6.1`,
+  `archive ^4.6.0` (langsung, sudah di override); hapus `excel ^4.0.6`
+  (tidak kompatibel dengan `archive` 4.x — memanggil API yang sudah
+  dihapus; tidak ada versi baru). `flutter pub get` OK.
+- `flutter analyze`: **No issues found.** `flutter test`: **72 test lolos**
+  (8 lama + 14 sync_delete + 35 import + 5 debt_delete + 5 bottom_sheet
+  SafeArea + 5 pre-existing lainnya — rincian di SYNC_DELETE_RESULT.md).
+- Pelajaran test (lihat SYNC_DELETE_RESULT.md § pengujian): symlink
+  `libsqlite3.so` (di luar `~`, hilang saat VM diganti); DB per file test
+  (`testDatabasePath`); `initializeDateFormatting('id_ID')` di tiap file
+  widget test; drain loop tap test harus menunggu TILE hilang (bukan
+  `state.debts` kosong) + pump 3 detik untuk timer debounce sync 2 detik.
+- TIDAK dilakukan: build APK lokal (tetap mustahil di VM), push GitHub,
+  keystore, rotasi anon key yang bocor (masih tertunda — lihat
+  PHASE2_RESULT.md), deploy Apps Script, dan pembuatan tabel/migrasi
+  Supabase (butuh SQL editor dashboard oleh user).
+- File baru/berubah: lihat SYNC_DELETE_RESULT.md § file. Hasil lengkap +
+  langkah user: `SYNC_DELETE_RESULT.md`.
+- Hapus satu seri (keputusan user 2026-11-06 ~08:22): `seriesOf` /
+  `debtSeriesOf` / `deleteDebtSeries` di `app_state.dart`,
+  tombol "Hapus Seri" + dialog konfirmasi (nama/kode, jumlah baris,
+  total nominal) di `debts_screen.dart`, string `debt_delete_series*`,
+  `createNextInstallment` mewarisi kode seri (+ backfill induk bila
+  kosong). Temuan: syncCode BUKAN identitas seri (kode baru per
+  cicilan di web + aplikasi) — kunci seri = profil/pihak/jenis/tenor/
+  nominal/keterangan. `flutter analyze` bersih; `flutter test`:
+  **83 lolos** (72 + 11 baru di `debt_series_delete_test.dart`).
+  `debt_delete_test.dart` diperbarui ke label baru. Rincian:
+  `SYNC_DELETE_RESULT.md` §8.

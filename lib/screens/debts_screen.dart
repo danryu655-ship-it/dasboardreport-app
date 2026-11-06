@@ -200,24 +200,35 @@ class DebtsScreen extends StatelessWidget {
               'Kode: ${debt.syncCode}',
               style: Theme.of(context).textTheme.labelSmall,
             ),
-          if (!debt.isLunas && !isViewOnly) ...[
+          // Tombol aksi: web menampilkan Hapus di SEMUA baris (termasuk yang
+          // sudah lunas — lihat hapusPiutang() di web). Sebelum perbaikan
+          // 2026-11-06 baris lunas tidak punya tombol Hapus sama sekali,
+          // sehingga cicilan yang sudah dilunasi tidak pernah bisa dihapus
+          // dan tetap tampil di bagian "Selesai" (laporan user). Lunasi
+          // hanya untuk yang belum lunas. Sejak keputusan "hapus satu seri
+          // sekaligus" (2026-11-06): tombol Hapus pada baris cicilan
+          // berlabel "Hapus Seri" dan menghapus SELURUH seri (aktif +
+          // lunas); baris tanpa tempo tetap "Hapus" (seri satu baris).
+          if (!isViewOnly) ...[
             const SizedBox(height: 10),
             Row(
               children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => _settle(context, state, debt),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.green,
-                      side: const BorderSide(color: AppColors.green),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                if (!debt.isLunas) ...[
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => _settle(context, state, debt),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.green,
+                        side: const BorderSide(color: AppColors.green),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
+                      child: Text(state.t('action_settle')),
                     ),
-                    child: Text(state.t('action_settle')),
                   ),
-                ),
-                const SizedBox(width: 8),
+                  const SizedBox(width: 8),
+                ],
                 Expanded(
                   child: OutlinedButton(
                     onPressed: () => _deleteDebt(context, state, debt),
@@ -228,7 +239,11 @@ class DebtsScreen extends StatelessWidget {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: Text(state.t('delete')),
+                    child: Text(
+                      debt.tipeTempo == 'cicilan'
+                          ? state.t('debt_delete_series')
+                          : state.t('delete'),
+                    ),
                   ),
                 ),
               ],
@@ -271,22 +286,39 @@ class DebtsScreen extends StatelessWidget {
     }
   }
 
+  /// Hapus satu seri sekaligus (keputusan user 2026-11-06): dialog wajib
+  /// menampilkan nama/kode seri, jumlah baris, dan total nominal; Batal
+  /// tidak menghapus apa pun. Baris tanpa tempo = seri satu baris.
   Future<void> _deleteDebt(
     BuildContext context,
     AppState state,
     Debt debt,
   ) async {
+    final series = state.debtSeriesOf(debt);
+    final total = series.fold<int>(0, (sum, d) => sum + d.nominal);
+    final isCicilan = debt.tipeTempo == 'cicilan';
     final ok = await showAppConfirm(
       context,
-      title: state.t('delete'),
-      message: state.t('debt_log_deleted', {
-        'jenis': debt.jenis,
-        'name': debt.partnerName,
-      }),
-      confirmLabel: state.t('delete'),
+      title: isCicilan
+          ? state.t('debt_delete_series_title')
+          : state.t('delete'),
+      message: isCicilan
+          ? state.t('debt_delete_series_confirm', {
+              'name': debt.partnerName,
+              'code': debt.syncCode.isNotEmpty ? debt.syncCode : '—',
+              'n': '${series.length}',
+              'total': formatRupiah(total),
+            })
+          : state.t('debt_log_deleted', {
+              'jenis': debt.jenis,
+              'name': debt.partnerName,
+            }),
+      confirmLabel: isCicilan
+          ? state.t('debt_delete_series')
+          : state.t('delete'),
       isDestructive: true,
     );
-    if (ok == true) await state.deleteDebt(debt.id);
+    if (ok == true) await state.deleteDebtSeries(debt.id);
   }
 
   void _showDebtForm(BuildContext context, AppState state) {
@@ -306,34 +338,41 @@ class DebtsScreen extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheet) => Padding(
-          padding: EdgeInsets.fromLTRB(
-            20,
-            12,
-            20,
-            20 + MediaQuery.of(ctx).viewInsets.bottom,
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppColors.border,
-                      borderRadius: BorderRadius.circular(2),
+      // SafeArea (bottom: true) agar tombol Simpan tampil utuh di atas
+      // system navigation bar Android (3-tombol maupun gesture) — regresi
+      // dari laporan user 2026-11-06: tombol terpotong di tepi bawah layar.
+      // viewInsets.bottom (keyboard) tetap ditambahkan di dalam.
+      builder: (ctx) => SafeArea(
+        bottom: true,
+        minimum: const EdgeInsets.only(bottom: 12),
+        child: StatefulBuilder(
+          builder: (ctx, setSheet) => Padding(
+            padding: EdgeInsets.fromLTRB(
+              20,
+              12,
+              20,
+              20 + MediaQuery.of(ctx).viewInsets.bottom,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: AppColors.border,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  state.t('debt_add'),
-                  style: Theme.of(ctx).textTheme.titleLarge,
-                ),
+                  const SizedBox(height: 16),
+                  Text(
+                    state.t('debt_add'),
+                    style: Theme.of(ctx).textTheme.titleLarge,
+                  ),
                 const SizedBox(height: 16),
                 // Jenis.
                 Container(
@@ -558,6 +597,7 @@ class DebtsScreen extends StatelessWidget {
             ),
           ),
         ),
+      ),
       ),
     );
   }

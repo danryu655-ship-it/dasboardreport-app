@@ -280,3 +280,119 @@ Semua body layar sudah memakai `SafeArea` (status bar aman). Kunci
 gratis, tanpa API key. `dependency_overrides: archive ^4.6.0` — lihat
 BUILD_NOTES §7. Tidak ada permission Android baru (foto bukti + OCR
 memakai galeri via system photo picker; INTERNET sudah ada).
+
+## 6. Perubahan 2026-11-06 — hapus dua arah + arsip Sheets + 3 masukan uji HP
+
+Keputusan user 2026-11-06 ~02:12 WIB: (1) hapus dua arah untuk data live
+(HP SQLite ↔ Supabase); (2) backup Google Sheets jadi arsip sejati (tidak
+pernah menghapus baris). Ditambah 3 masukan dari pengujian APK Fase 2 di HP
+(2026-11-06 02:18 WIB). Detail lengkap: `SYNC_DELETE_RESULT.md`.
+
+### 6.1 Hapus dua arah (live) — tabel tombstone `sync_deletes`
+
+- Tabel `public.sync_deletes`: `id` (identity), `user_id` (FK auth.users,
+  cascade), `table_name`, `row_id`, `row_key` (default `''`),
+  `deleted_at` (default now()); unique index
+  `(user_id, table_name, row_id, row_key)`; index `(user_id, deleted_at)`;
+  RLS + 4 policy "own rows". Migrasi idempotent:
+  `docs/supabase-migration-2026-11-06-sync-deletes.sql`.
+- Tombstone HANYA untuk `transactions`/`bills`/`debts` (id numerik = waktu
+  pembuatan ms epoch). TIDAK untuk `profiles` (rename lokal akan membuat
+  tombstone nama lama menghapus data profil), `bug_reports` (id
+  AUTOINCREMENT per perangkat — bertabrakan antar perangkat), `wallets`
+  (tidak disinkronkan).
+- Penjaga anti-false-delete: pull menerapkan tombstone hanya bila
+  `rowId < deletedAtMs` (`==` juga tidak dihapus — ambiguitas 1 ms).
+  Tombstone tidak pernah di-prune.
+- Push: hapus baris server, lalu upsert tombstone
+  (`onConflict: 'user_id,table_name,row_id,row_key'`, `deleted_at` = waktu
+  hapus lokal dari antrean). Pull: `_pullDeletes(since)` setelah loop
+  upsert baris, tarik tombstone `deleted_at > lastSyncAt`.
+- SQLite lokal tetap v3 (tombstone hanya di server; tidak ada perubahan
+  skema lokal). Fungsi baru `lib/db.dart`:
+  `deleteTransactionIfCreatedBefore` / `deleteBillIfCreatedBefore` /
+  `deleteDebtIfCreatedBefore` (`DELETE ... WHERE id = ? AND id < ?`).
+
+### 6.2 Arsip Sheets (append-only)
+
+- Apps Script `docs/sheets-backup-apps-script.gs` ditulis ulang: `mergeTab`
+  — kunci kolom `nama` (Profil, karena id-nya nomor urut yang dipakai
+  ulang) dan `id` (tab lain); baris lama dipertahankan, baris yang berubah
+  diperbarui di tempat, baris baru ditambah. **Tidak pernah `clearContents`,
+  tidak pernah menghapus baris.** Respons per tab: `{kept, updated, added}`.
+- Referensi yang sama di `lib/sync/sheets_backup.dart`:
+  `mergeArchiveRows({tab, existing, incoming})` (dipakai test).
+
+### 6.3 Bug: Hapus tidak bekerja di bagian "Selesai" (Hutang Piutang)
+
+- Penyebab: baris aksi (Lunasi + Hapus) hanya dibuat bila
+  `!debt.isLunas` — baris lunas TIDAK punya tombol Hapus sama sekali
+  (berbeda dengan web yang menampilkan Hapus di semua baris). Jadi cicilan
+  yang sudah dilunasi tidak pernah bisa dihapus dan menetap di "Selesai".
+- Perbaikan (`lib/screens/debts_screen.dart`): baris aksi tampil bila
+  `!isViewOnly` (status apa pun); Lunasi hanya bila belum lunas; Hapus
+  selalu tampil (lebar penuh bila sudah lunas). Paritas web.
+- Keputusan produk TERBUKA (bukan diimplementasikan): hapus per baris
+  saja — web `hapusPiutang(id)` menghapus SATU baris, dan tiap cicilan
+  punya `sync_code` baru (bukan identitas seri). Hapus berantai satu seri
+  butuh keputusan user.
+
+### 6.4 Bug: tombol Simpan tertutup navigation bar di bottom sheet
+
+- `SafeArea(bottom: true, minimum: bottom 12)` membungkus konten 4
+  `showModalBottomSheet`: form Utang/Piutang (`debts_screen.dart`),
+  form Tagihan (`bills_screen.dart`), detail bulan + tagihan belum bayar
+  (`dashboard_screen.dart`). Form transaksi adalah Scaffold layar penuh
+  dengan SafeArea — tidak terdampak.
+
+### 6.5 Fitur baru: Import Excel (layar Lainnya → "Ekspor & Cadangan Data")
+
+- Menu "Import Excel" tepat di bawah "Ekspor Excel" → `ImportScreen`:
+  (a) unduh template (CSV, kolom sama persis dengan Ekspor Excel —
+  header diambil dari konstanta yang sama di `ExportService`);
+  (b) pilih file `.csv`/`.xlsx` dari perangkat (`file_picker` 11.x, system
+  picker, tanpa permission baru); (c) validasi + pratinjau (jumlah
+  valid/tidak valid, 10 baris pertama tiap kategori beserta alasan);
+  (d) impor → `AppState.importTransactions/importDebts` (hanya menambah
+  data baru; id baru via `_nextFreshId`; masuk antrean sync seperti data
+  biasa).
+- Cakupan: transaksi + utang/piutang. Parser `lib/services/import_service.dart`:
+  CSV RFC 4180 (kutip, koma/newline di dalam sel, kutip ganda, CRLF/LF,
+  BOM UTF-8, fallback latin1); tanggal ISO, dd/MM/yyyy, dd-MM-yyyy,
+  yyyy/MM/dd (tanggal tak ada seperti 31/02 ditolak); nominal konvensi
+  Indonesia (titik = ribuan, koma = desimal, awalan Rp); baris TOTAL
+  ekspor dilewati; kategori/metode kosong → default Lainnya/Cash; status
+  utang belum/sudah (lunas/selesai → sudah).
+- XLSX dibaca `lib/services/xlsx_reader.dart` (pembaca minimal berbasis
+  `archive` 4.6.0 + `xml`): sheet pertama, shared strings, inline
+  strings, angka, tanggal serial Excel (dengan kompensasi bug kabisat
+  1900). Package `excel` 4.0.6 DIHAPUS — tidak kompatibel dengan
+  `archive` 4.x (memanggil `ZipDecoder().decodeBuffer` dan
+  `ArchiveFile.compress` yang sudah tidak ada; tidak ada versi baru).
+  `archive` kini dependensi langsung (`^4.6.0`, juga di
+  `dependency_overrides`), `xml ^6.6.1` dependensi langsung baru.
+
+### 6.6 Hapus satu seri sekaligus (keputusan user 2026-11-06 ~08:22)
+
+- Tombol baris cicilan berlabel "Hapus Seri" (tanpa tempo tetap
+  "Hapus"); menekan Hapus pada satu baris mana pun menghapus SELURUH
+  seri (aktif + sudah lunas). Dialog konfirmasi wajib menampilkan
+  nama/kode seri, jumlah baris, dan total nominal; Batal tidak
+  menghapus apa pun.
+- **Identitas seri BUKAN syncCode.** Baik web maupun aplikasi selama
+  ini memberi kode BARU di tiap cicilan (web `index.html` baris 2256;
+  aplikasi `createNextInstallment` → `_newSyncCode()`), dan baris
+  pertama dari form punya syncCode `''`. Kunci seri yang dipakai:
+  profil + pihak + jenis + tenor + nominal + keterangan, dengan
+  `tipeTempo == 'cicilan'` (`AppState.seriesOf`, statis + murni).
+  Tanpa tempo = seri satu baris. Dua pinjaman cicilan yang identik
+  persis dianggap satu seri (dialog jumlah + total sebagai pengaman).
+- `createNextInstallment` kini MEWARISI syncCode induk; bila induk
+  kosong, satu kode baru dibuat dan diisi ke induk juga (update +
+  upsert) — supaya satu seri punya satu kode ke depan.
+- `deleteDebtSeries(id)`: hapus tiap baris lokal + `recordChange`
+  delete per baris → satu tombstone per baris di `sync_deletes` saat
+  push. String baru `debt_delete_series*` (id + en). Test:
+  `test/debt_series_delete_test.dart` (11 test); `debt_delete_test.dart`
+  diperbarui ke label "Hapus Seri". Rincian + langkah uji HP:
+  `SYNC_DELETE_RESULT.md` §8.

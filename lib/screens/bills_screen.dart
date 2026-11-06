@@ -287,15 +287,21 @@ class BillsScreen extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheet) => Padding(
-          padding: EdgeInsets.fromLTRB(
-            20,
-            12,
-            20,
-            20 + MediaQuery.of(ctx).viewInsets.bottom,
-          ),
-          child: Column(
+      // SafeArea (bottom: true) agar tombol Simpan tampil utuh di atas
+      // system navigation bar Android — pola yang sama dengan form utang
+      // (laporan user 2026-11-06).
+      builder: (ctx) => SafeArea(
+        bottom: true,
+        minimum: const EdgeInsets.only(bottom: 12),
+        child: StatefulBuilder(
+          builder: (ctx, setSheet) => Padding(
+            padding: EdgeInsets.fromLTRB(
+              20,
+              12,
+              20,
+              20 + MediaQuery.of(ctx).viewInsets.bottom,
+            ),
+            child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -404,6 +410,7 @@ class BillsScreen extends StatelessWidget {
             ],
           ),
         ),
+      ),
       ),
     );
   }

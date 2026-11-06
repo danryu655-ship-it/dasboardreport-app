@@ -41,6 +41,36 @@ python3 ~/workspace/custom-connectors/custom.supabase/bin/sb_rest.py "/rest/v1/t
 
 Harus mengembalikan `[]` (bukan 404).
 
+## Langkah 1b — Migrasi hapus dua arah (WAJIB bila skema lama sudah ada)
+
+Sejak 2026-11-06, hapus disinkronkan DUA ARAH lewat tabel tombstone
+`sync_deletes`. Bila kamu sudah menjalankan `supabase-schema.sql` versi
+lama (tanpa `sync_deletes`), jalankan migrasi ini — JANGAN jalankan ulang
+skema lengkap dari nol:
+
+1. Dashboard Supabase → proyek `nbyhscsladjdmwzaomit` → **SQL Editor** →
+   **New query**.
+2. Tempel SELURUH isi `docs/supabase-migration-2026-11-06-sync-deletes.sql`
+   lalu **Run**. File ini idempotent (aman dijalankan ulang): hanya
+   menambah tabel `sync_deletes` + 2 indeks + RLS + 4 kebijakan "own rows".
+   Tabel dan data yang sudah ada TIDAK diubah.
+3. Proyek yang baru dibuat dari `supabase-schema.sql` terbaru TIDAK perlu
+   langkah ini (tabel `sync_deletes` sudah termasuk di sana).
+
+Verifikasi:
+
+```text
+python3 ~/workspace/custom-connectors/custom.supabase/bin/sb_rest.py /rest/v1/
+```
+
+Harus muncul path `/sync_deletes`. Lalu:
+
+```text
+python3 ~/workspace/custom-connectors/custom.supabase/bin/sb_rest.py "/rest/v1/sync_deletes?select=*&limit=1"
+```
+
+Harus mengembalikan `[]` (bukan 404).
+
 ## Langkah 2 — Aktifkan Anonymous Auth
 
 Aplikasi masuk dengan `signInAnonymously()` (satu identitas per instalasi,
@@ -103,7 +133,18 @@ dengan nilai `--dart-define` diisi manual — JANGAN menuliskannya ke file.
   (`updated_at` > `last_sync_at`).
 - Auth anonim → `user_id` = `auth.uid()`; RLS memastikan satu instalasi
   tidak bisa membaca data instalasi lain.
-- Hapus hanya disinkronkan naik (push); pull tidak menghapus baris lokal.
+- Hapus DUA ARAH (sejak 2026-11-06): hapusan lokal di-push (baris server
+  dihapus + tombstone dicatat di `sync_deletes`); pull membaca tombstone
+  dan menghapus baris lokal yang cocok — hanya untuk `transactions`,
+  `bills`, `debts` (id numerik = ms epoch pembuatan). Pull TIDAK PERNAH
+  menghapus tanpa tombstone: baris yang dibuat sesudah hapusan (id lebih
+  besar dari waktu hapusan) tidak ikut terhapus.
+- Pengecualian hapus dua arah: `profiles` tidak memakai tombstone (tidak
+  ada hapus profil di UI, hanya rename — hapusan nama lama tetap di-push
+  ke server tapi tidak diterapkan sebagai hapusan lokal di pull);
+  `bug_reports` tidak memakai tombstone (id AUTOINCREMENT bertabrakan
+  antar perangkat — hapusan laporan bug hanya naik, perangkat lain
+  menyimpan salinannya sendiri).
 - Status sync terlihat di layar **Lainnya → Sinkronisasi Cloud** (ketuk
   untuk sync manual; menampilkan jumlah perubahan yang menunggu).
 - Laporan bug hanya naik (push) — tidak di-pull, karena id lokalnya
