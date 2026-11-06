@@ -44,7 +44,7 @@ jobs:
           flutter build apk --debug
           --dart-define=https://nbyhscsladjdmwzaomit.supabase.co/rest/v1/=${{ secrets.SUPABASE_URL }}
           --dart-define=sb_publishable_uh-3jdoOGCZQyF5iMJJQ3A_sgf-KuLp=${{ secrets.SUPABASE_ANON_KEY }}
-          --dart-define=https://script.google.com/macros/s/AKfycbxTm5EHYkSyI01xALHaOBlf76_5likTj8beQQejAnBsa5eNpGW9nE8E3RPyC0Qs7uro/exec=${{ secrets.SHEETS_WEBAPP_URL }}
+          --dart-define=https://script.google.com/macros/s/AKfycbx_P9faRFtTNHpx8dU37iHZJm7rFoyySAF1FZu8u1TdgxT1PCcaXWivh1MxbdI994Ff/exec=${{ secrets.SHEETS_WEBAPP_URL }}
 
 
       - name: Upload APK artifact
