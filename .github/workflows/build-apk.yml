@@ -42,10 +42,9 @@ jobs:
       - name: Build debug APK
         run: >
           flutter build apk --debug
-          --dart-define=https://nbyhscsladjdmwzaomit.supabase.co/rest/v1/=${{ secrets.SUPABASE_URL }}
-          --dart-define=sb_publishable_PiJydzi28PYOsGMwJpx1Aw_YYJ6glJ7=${{ secrets.SUPABASE_ANON_KEY }}
-          --dart-define=https://script.google.com/macros/s/AKfycbx_P9faRFtTNHpx8dU37iHZJm7rFoyySAF1FZu8u1TdgxT1PCcaXWivh1MxbdI994Ff/exec=${{ secrets.SHEETS_WEBAPP_URL }}
-
+        --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }}
+        --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
+        --dart-define=SHEETS_WEBAPP_URL=${{ secrets.SHEETS_WEBAPP_URL }}
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
