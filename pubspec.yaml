@@ -1,7 +1,7 @@
 name: dasboardreport
 description: "DasboardReport - Aplikasi keuangan pribadi (versi Android native, Flutter)."
 publish_to: 'none'
-version: 2.9.31+1
+version: 2.9.32+1
 
 environment:
   sdk: ^3.9.0

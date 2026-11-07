@@ -105,7 +105,11 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
       case 'Paylater':
         return AppConstants.daftarPaylater;
       default:
-        return const [];
+        // Cerminan web (index.html ~2903): metode lain (QR/QRIS) memakai
+        // daftar bank transfer. Sebelumnya default [] membuat
+        // `_bankList.first` melempar "Bad state: No element" saat metode QR
+        // dipilih (laporan user 2026-11-06 23:43).
+        return AppConstants.daftarBankTransfer;
     }
   }
 
@@ -392,7 +396,9 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
                 items: AppConstants.metodePembayaran,
                 onChanged: (v) => setState(() {
                   _metode = v!;
-                  _detailBank = '';
+                  // Cerminan web: select bank langsung terisi opsi pertama
+                  // dari daftar metode baru, jadi yang tampil = yang tersimpan.
+                  _detailBank = _bankList.isNotEmpty ? _bankList.first : '';
                   _tujuanBank = '';
                 }),
               ),
@@ -566,6 +572,18 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
     required List<String> items,
     required ValueChanged<String?> onChanged,
   }) {
+    // Guard: daftar kosong tidak boleh melempar "Bad state: No element"
+    // via `items.first` (pernah terjadi saat metode QR, 2026-11-06).
+    if (items.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        decoration: BoxDecoration(
+          border: Border.all(color: AppColors.border),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Text('—', style: TextStyle(fontSize: 15)),
+      );
+    }
     final safeValue = items.contains(value) ? value : items.first;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14),
