@@ -279,8 +279,11 @@ class AppStrings {
       'export_pdf_ok': 'Ekspor PDF Format Neraca Berhasil ({type})',
       'export_excel_ok': 'Ekspor Excel Berhasil ({type})',
       'export_no_data': 'Tidak ada data untuk diekspor pada periode ini.',
+      'export_preparing_pdf': 'Menyiapkan PDF…',
+      'export_preparing_excel': 'Menyiapkan Excel…',
       'export_share': 'Bagikan / Simpan File',
       'sheets_backup': 'Backup ke Google Sheets',
+      'sheets_backup_preparing': 'Mencadangkan ke Google Sheets…',
       'sheets_backup_ok': 'Backup terkirim ke Google Sheets.',
       'sheets_backup_not_configured':
           'URL backup Google Sheets belum dikonfigurasi. Minta URL Web App Apps Script untuk mengaktifkan backup.',
@@ -582,8 +585,11 @@ class AppStrings {
       'export_pdf_ok': 'PDF Balance Report Export Succeeded ({type})',
       'export_excel_ok': 'Excel Export Succeeded ({type})',
       'export_no_data': 'No data to export in this period.',
+      'export_preparing_pdf': 'Preparing PDF…',
+      'export_preparing_excel': 'Preparing Excel…',
       'export_share': 'Share / Save File',
       'sheets_backup': 'Backup to Google Sheets',
+      'sheets_backup_preparing': 'Backing up to Google Sheets…',
       'sheets_backup_ok': 'Backup sent to Google Sheets.',
       'sheets_backup_not_configured':
           'Google Sheets backup URL is not configured yet. Ask for the Apps Script Web App URL to enable backup.',

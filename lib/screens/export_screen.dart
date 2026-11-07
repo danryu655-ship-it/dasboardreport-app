@@ -26,6 +26,37 @@ class _ExportScreenState extends State<ExportScreen> {
   late DateTime _from;
   late DateTime _to;
   bool _busy = false;
+  bool _dialogShown = false;
+
+  /// Dialog progres modal (tidak bisa ditutup paksa) supaya pengguna selalu
+  /// melihat animasi saat file disiapkan — sebelumnya tombol hanya nonaktif
+  /// tanpa umpan balik, sehingga ekspor terasa "tidak ada hasil".
+  void _showProgress(String message) {
+    if (_dialogShown) return;
+    _dialogShown = true;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          content: Row(
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(width: 16),
+              Expanded(child: Text(message)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _hideProgress() {
+    if (!_dialogShown) return;
+    _dialogShown = false;
+    if (mounted) Navigator.of(context, rootNavigator: true).pop();
+  }
 
   @override
   void initState() {
@@ -76,6 +107,9 @@ class _ExportScreenState extends State<ExportScreen> {
       return;
     }
     setState(() => _busy = true);
+    _showProgress(
+      state.t(isPdf ? 'export_preparing_pdf' : 'export_preparing_excel'),
+    );
     try {
       final file = isPdf
           ? await ExportService.exportPdf(
@@ -94,6 +128,9 @@ class _ExportScreenState extends State<ExportScreen> {
               transactions: state.transactions,
               debts: state.debts,
             );
+      // Tutup dialog SEBELUM membuka share sheet, supaya sheet tidak
+      // tertutup dialog.
+      _hideProgress();
       await Share.shareXFiles([
         XFile(file.path),
       ], subject: state.t(isPdf ? 'export_title_pdf' : 'export_title_excel'));
@@ -106,6 +143,7 @@ class _ExportScreenState extends State<ExportScreen> {
         );
       }
     } catch (e) {
+      _hideProgress();
       if (mounted) {
         showAppSnack(context, 'Gagal mengekspor: $e', isError: true);
       }
@@ -117,6 +155,7 @@ class _ExportScreenState extends State<ExportScreen> {
   Future<void> _backupSheets(AppState state) async {
     if (_busy) return;
     setState(() => _busy = true);
+    _showProgress(state.t('sheets_backup_preparing'));
     try {
       final payload = SheetsBackup.buildPayload(
         profile: state.activeProfile ?? '',
@@ -136,6 +175,7 @@ class _ExportScreenState extends State<ExportScreen> {
             .toList(),
       );
       final result = await SheetsBackup.backup(payload);
+      _hideProgress();
       if (!mounted) return;
       if (result.ok) {
         showAppSnack(context, state.t('sheets_backup_ok'));
@@ -153,6 +193,8 @@ class _ExportScreenState extends State<ExportScreen> {
         );
       }
     } finally {
+      // Idempotent: menutup dialog bila masih terbuka (mis. backup throw).
+      _hideProgress();
       if (mounted) setState(() => _busy = false);
     }
   }
@@ -248,7 +290,13 @@ class _ExportScreenState extends State<ExportScreen> {
               const SizedBox(height: 12),
               OutlinedButton.icon(
                 onPressed: _busy ? null : () => _export(state, false),
-                icon: const Icon(Icons.table_chart_rounded),
+                icon: _busy
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.table_chart_rounded),
                 label: Text(state.t('export_title_excel')),
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 14),
