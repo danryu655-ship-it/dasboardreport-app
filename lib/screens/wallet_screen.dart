@@ -66,12 +66,17 @@ class _WalletScreenState extends State<WalletScreen> {
     final daily = state.dailyExpense(_month.year, _month.month);
     final daysInMonth = DateTime(_month.year, _month.month + 1, 0).day;
 
-    final trx = state.walletTransactions(
-      search: _search,
-      from: _iso(_from),
-      to: _iso(_to),
-      jenis: _jenis == 'piutang' ? 'semua' : _jenis,
-    );
+    // Mode Piutang bersifat EKSKLUSIF (laporan user 2026-11-07): hanya
+    // rekap piutang, tanpa transaksi pemasukan/pengeluaran. Sebelumnya
+    // filter Piutang memuat SEMUA transaksi + semua utang/piutang.
+    final trx = _jenis == 'piutang'
+        ? <AppTransaction>[]
+        : state.walletTransactions(
+            search: _search,
+            from: _iso(_from),
+            to: _iso(_to),
+            jenis: _jenis,
+          );
     final debts = _jenis == 'piutang'
         ? state.walletDebts(
             search: _search,
@@ -87,6 +92,11 @@ class _WalletScreenState extends State<WalletScreen> {
                   jenis: 'semua',
                 )
               : <Debt>[]);
+
+    // Rekap eksklusif Piutang (dihitung dari daftar piutang di atas).
+    final piutangBelum = debts.where((d) => !d.isLunas).toList();
+    final piutangBelumTotal =
+        piutangBelum.fold<int>(0, (s, d) => s + d.nominal);
 
     // Gabung + urut tanggal desc (cerminan renderSemuaTransaksi di web).
     final merged =
@@ -275,6 +285,34 @@ class _WalletScreenState extends State<WalletScreen> {
                 ),
               ),
               const SizedBox(height: 12),
+              // Rekap eksklusif Piutang: total + jumlah catatan belum lunas.
+              // Hanya tampil saat filter Piutang aktif.
+              if (_jenis == 'piutang') ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: _summaryCard(
+                        context,
+                        state.t('wallet_piutang_outstanding'),
+                        state.isPrivacyMode
+                            ? 'Rp •••'
+                            : formatRupiah(piutangBelumTotal),
+                        AppColors.green,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _summaryCard(
+                        context,
+                        state.t('wallet_piutang_records'),
+                        state.isPrivacyMode ? '•••' : '${piutangBelum.length}',
+                        AppColors.purple,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+              ],
               // Daftar gabungan.
               if (merged.isEmpty)
                 Padding(

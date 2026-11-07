@@ -74,7 +74,9 @@ perbaikan QRIS). File test yang ada: `transaction_form_qr_test.dart` (2),
 | F06-H2 | export PDF | happy | export PDF | laporan terbaca, angka benar | belum | |
 | F06-H3 | export CSV | happy | export CSV | file berisi transaksi | belum | |
 | F06-E1 | export kosong | edge: tidak ada data | export saat data kosong | file kosong + pesan, tidak crash | belum | |
-| F06-E2 | dialog progres | edge: animasi saat menyiapkan file | ketuk Ekspor PDF/Excel/Backup Sheets | dialog "Menyiapkan…" + spinner muncul, tertutup sebelum share sheet dibuka; tombol Excel menampilkan spinner saat sibuk | belum | |
+| F06-E2 | dialog progres | edge: animasi saat menyiapkan file | ketuk Ekspor Data → pilih format / Backup Sheets | dialog "Menyiapkan…" + spinner muncul, tertutup sebelum share sheet dibuka; tombol Ekspor menampilkan spinner saat sibuk | belum | |
+| F06-E3 | ekspor gabung | happy | menu Lainnya hanya ada 1 "Ekspor Data"; ketuk → dialog pilih PDF/Excel | 1 menu + 1 tombol; pilih PDF → file PDF; pilih Excel → file CSV | ada (export_strings) | lolos |
+| F06-E4 | tidak ada data | edge: periode tanpa transaksi | ekspor dengan rentang tanpa data | dialog "Tidak ada data" menyebut periode, bukan diam/snackbar singkat | belum | |
 
 ## F07 — OCR struk
 
@@ -101,6 +103,7 @@ perbaikan QRIS). File test yang ada: `transaction_form_qr_test.dart` (2),
 | --- | --- | --- | --- | --- | --- | --- |
 | F09-H1 | backup | happy | jalankan backup | tab terisi (archive, mergeTab) | manual | |
 | F09-E1 | backup tidak menghapus | edge: backup 2x | backup, backup lagi | data Sheets lama tetap ada | manual | |
+| F09-E2 | backup redirect 302 | edge: Apps Script menjawab 302 | jalankan backup (server lokal: 302 → echo) | body ikut ter-POST ulang ke URL redirect; sukses bila script menjawab {"ok":true}; jawaban HTML dilaporkan jelas, bukan "HTTP 302" | ada (sheets_backup_redirect) | lolos |
 
 ## F10 — PIN / kunci
 
@@ -140,17 +143,20 @@ perbaikan QRIS). File test yang ada: `transaction_form_qr_test.dart` (2),
 | F14-H1 | saldo live | happy | tambah transaksi | saldo berubah langsung | belum | |
 | F14-H2 | 5 transaksi terbaru | happy | buka dashboard | 5 transaksi terbaru tampil | belum | |
 | F14-H3 | activity log | happy | lakukan transaksi | tercatat di activity log | belum | |
+| F14-P1 | filter Piutang eksklusif | happy | Wallet → ketuk chip Piutang | hanya daftar piutang + kartu rekap "Total Piutang Belum Lunas"; tanpa transaksi pemasukan/pengeluaran dan tanpa utang | ada (wallet_piutang_filter) | lolos |
 
-## Checklist click-through manual (HP Android, APK debug-2.9.32-21)
+## Checklist click-through manual (HP Android, APK debug-2.9.32-23)
 
-- [ ] Install -21, buka aplikasi, PIN berfungsi
+- [ ] Install -23, buka aplikasi, PIN berfungsi; footer menampilkan v2.9.32
 - [ ] Input transaksi metode QRIS → tidak crash (retest perbaikan QRIS)
 - [ ] Tambah + bayar tagihan → expense "Bayar Tagihan" muncul
 - [ ] Import .xlsx dari export web → data masuk profil aktif
-- [ ] Export PDF + Excel → file terbuka dan benar
+- [ ] Ekspor Data → pilih PDF / Excel → file terbuka dan benar
+- [ ] Ekspor dengan periode tanpa data → dialog "Tidak ada data" menyebut periode
+- [ ] Wallet → chip Piutang → hanya piutang + kartu rekap total belum lunas
 - [ ] Foto struk asli → OCR mengisi form
 - [ ] Sync Supabase asli (tambah/edit/hapus) → cek di REST
-- [ ] Backup Sheets asli → tab terisi, data lama tetap ada
+- [ ] Backup Sheets asli → tab terisi, data lama tetap ada, tanpa error HTTP 302
 - [ ] Ganti profil → data profil lain tidak terlihat
 - [ ] Mode pesawat → simpan → online → tersinkron
 

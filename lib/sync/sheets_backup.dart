@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -157,7 +158,7 @@ class SheetsBackup {
     return {
       'type': 'backup',
       'app': 'DasboardReport',
-      'version': '2.9.31',
+      'version': '2.9.32',
       'profile': profile,
       'exportedAt': DateTime.now().toIso8601String(),
       'tabs': {
@@ -221,31 +222,119 @@ class SheetsBackup {
     return merged;
   }
 
-  /// Kirim payload ke Apps Script. Mengembalikan hasil (sukses/gagal/alasan).
-  static Future<SheetsBackupResult> backup(Map<String, dynamic> payload) async {
-    if (!CloudConfig.isSheetsConfigured) {
-      return SheetsBackupResult.notConfigured;
-    }
+  /// POST JSON dengan mengikuti redirect secara manual (POST ulang + body).
+  ///
+  /// Alasan (laporan user 2026-11-07: backup gagal "HTTP 302"): Google Apps
+  /// Script membalas POST ke URL /exec dengan HTTP 302 menuju
+  /// script.googleusercontent.com. HttpClient bawaan mengikuti redirect 302
+  /// dengan mengubah POST -> GET dan MEMBUANG body, sehingga doPost di Apps
+  /// Script tidak pernah menerima payload — dan script ini tidak punya
+  /// doGet, jadi permintaan itu gagal. Di sini setiap redirect dijawab
+  /// dengan POST ulang berisi body yang sama (maks. [maxRedirects]
+  /// lompatan), supaya doPost benar-benar menerima payload.
+  /// Mengembalikan status + body mentah dari respons terakhir.
+  static Future<({int statusCode, String body})> postJson(
+    Uri url,
+    String body, {
+    int maxRedirects = 5,
+  }) async {
+    var current = url;
+    final deadline = DateTime.now().add(const Duration(seconds: 45));
     HttpClient? client;
     try {
       client = HttpClient();
-      final request = await client.postUrl(
-        Uri.parse(CloudConfig.sheetsWebAppUrl),
-      );
-      request.headers.contentType = ContentType.json;
-      request.write(jsonEncode(payload));
-      final response = await request.close().timeout(
-        const Duration(seconds: 30),
-      );
-      await response.drain<void>();
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        return SheetsBackupResult.success;
+      for (var hop = 0; hop <= maxRedirects; hop++) {
+        final remaining = deadline.difference(DateTime.now());
+        if (remaining <= Duration.zero) {
+          throw TimeoutException('backup ke Google Sheets timeout', remaining);
+        }
+        final request = await client.postUrl(current);
+        // Jangan biarkan HttpClient mengikuti redirect sendiri (ia mengubah
+        // POST 302 -> GET tanpa body); kita yang POST ulang secara manual.
+        request.followRedirects = false;
+        request.headers.contentType = ContentType.json;
+        request.write(body);
+        final response = await request.close().timeout(remaining);
+        final bytes = await response.fold<List<int>>(
+          <int>[],
+          (acc, chunk) => acc..addAll(chunk),
+        );
+        final respBody = utf8.decode(bytes, allowMalformed: true);
+        final code = response.statusCode;
+        final location =
+            response.headers.value(HttpHeaders.locationHeader)?.trim();
+        final isRedirect =
+            (code == 301 ||
+                    code == 302 ||
+                    code == 303 ||
+                    code == 307 ||
+                    code == 308) &&
+                location != null &&
+                location.isNotEmpty;
+        if (!isRedirect || hop == maxRedirects) {
+          return (statusCode: code, body: respBody);
+        }
+        current = current.resolve(location);
       }
-      return SheetsBackupResult.failed('HTTP ${response.statusCode}');
-    } catch (e) {
-      return SheetsBackupResult.failed(e.toString());
+      // Tidak terjangkau (loop selalu return), tapi demi analyzer:
+      return (statusCode: 302, body: '');
     } finally {
       client?.close(force: true);
+    }
+  }
+
+  /// Kirim payload ke Apps Script. Mengembalikan hasil (sukses/gagal/alasan).
+  /// [urlOverride] hanya untuk tes (URL server lokal); bila null, URL diambil
+  /// dari --dart-define SHEETS_WEBAPP_URL.
+  static Future<SheetsBackupResult> backup(
+    Map<String, dynamic> payload, {
+    Uri? urlOverride,
+  }) async {
+    if (urlOverride == null && !CloudConfig.isSheetsConfigured) {
+      return SheetsBackupResult.notConfigured;
+    }
+    final urlRaw = urlOverride?.toString() ?? CloudConfig.sheetsWebAppUrl;
+    final body = jsonEncode(payload);
+    try {
+      final result = await postJson(Uri.parse(urlRaw), body);
+      final code = result.statusCode;
+      if (code < 200 || code >= 300) {
+        if (code == 301 || code == 302) {
+          return SheetsBackupResult.failed(
+            'HTTP $code — URL Web App dialihkan (deployment mungkin sudah '
+            'tidak aktif atau meminta login). Cek deployment Apps Script.',
+          );
+        }
+        return SheetsBackupResult.failed('HTTP $code');
+      }
+      // Sukses HTTP saja belum cukup: Apps Script harus menjawab JSON
+      // {"ok":true}. Bila jawabannya HTML (mis. halaman login Google),
+      // berarti deployment meminta login — bukan payload yang salah.
+      try {
+        final decoded = jsonDecode(result.body);
+        if (decoded is Map && decoded['ok'] == true) {
+          return SheetsBackupResult.success;
+        }
+        final err = decoded is Map ? decoded['error']?.toString() : null;
+        return SheetsBackupResult.failed(
+          err != null && err.isNotEmpty
+              ? 'Apps Script: $err'
+              : 'Apps Script menjawab ok=false.',
+        );
+      } catch (_) {
+        final snippet =
+            result.body.trim().replaceAll(RegExp(r'\s+'), ' ');
+        final shown = snippet.length > 120
+            ? '${snippet.substring(0, 120)}…'
+            : snippet;
+        return SheetsBackupResult.failed(
+          'Web App tidak mengembalikan JSON (didapat: '
+          '${shown.isEmpty ? 'respons kosong' : shown}). Cek deployment '
+          'Apps Script — akses harus "Anyone".',
+        );
+      }
+    } catch (e) {
+      return SheetsBackupResult.failed(e.toString());
     }
   }
 }

@@ -186,19 +186,12 @@ class MoreScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 8),
+              // Ekspor PDF + Excel digabung jadi SATU menu (laporan user
+              // 2026-11-07): format dipilih di layar Ekspor.
               SettingsItem(
-                icon: Icons.picture_as_pdf_rounded,
+                icon: Icons.file_download_rounded,
                 iconColor: AppColors.black,
-                label: state.t('export_pdf'),
-                onTap: () => Navigator.of(
-                  context,
-                ).push(MaterialPageRoute(builder: (_) => const ExportScreen())),
-              ),
-              const SizedBox(height: 8),
-              SettingsItem(
-                icon: Icons.table_view_rounded,
-                iconColor: AppColors.green,
-                label: state.t('export_excel'),
+                label: state.t('export_data'),
                 onTap: () => Navigator.of(
                   context,
                 ).push(MaterialPageRoute(builder: (_) => const ExportScreen())),

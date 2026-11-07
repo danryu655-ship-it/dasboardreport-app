@@ -799,7 +799,9 @@ class AppState extends ChangeNotifier {
   }
 
   /// Utang/piutang untuk filter Wallet: 'semua' hanya yang belum lunas,
-  /// 'piutang' menampilkan semua (cerminan renderSemuaTransaksi di web).
+  /// 'piutang'/'utang' hanya jenis itu (semua status). Sebelumnya parameter
+  /// jenis diabaikan — bug (laporan user 2026-11-07): filter Piutang ikut
+  /// menampilkan utang.
   List<Debt> walletDebts({
     String search = '',
     String? from,
@@ -808,6 +810,7 @@ class AppState extends ChangeNotifier {
   }) {
     final q = search.trim().toLowerCase();
     return debts.where((d) {
+      if (jenis != 'semua' && d.jenis != jenis) return false;
       if (jenis == 'semua' && d.isLunas) return false;
       if (from != null && from.isNotEmpty && d.tanggal.compareTo(from) < 0) {
         return false;

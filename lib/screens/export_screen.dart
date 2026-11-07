@@ -100,10 +100,65 @@ class _ExportScreenState extends State<ExportScreen> {
     });
   }
 
+  /// Dialog "tidak ada data" — sengaja dialog, bukan snackbar: sebelumnya
+  /// ekspor yang tidak ada datanya hanya menampilkan snackbar singkat
+  /// sehingga terasa "diam" (laporan user 2026-11-07). Dialog menyebut
+  /// periode yang dicek supaya pengguna tahu harus mengubah apa.
+  Future<void> _showNoDataDialog(AppState state) async {
+    final fromStr = DateFormat('d MMM yyyy', 'id_ID').format(_from);
+    final toStr = DateFormat('d MMM yyyy', 'id_ID').format(_to);
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(state.t('export_no_data_title')),
+        content: Text(
+          state.t('export_no_data', {'from': fromStr, 'to': toStr}),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(state.t('ok')),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// SATU tombol ekspor: pengguna memilih format (PDF / Excel) di dialog,
+  /// lalu [_export] menjalankan format yang dipilih.
+  Future<void> _pickFormatAndExport(AppState state) async {
+    if (_busy) return;
+    final choice = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(state.t('export_choose_format')),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.picture_as_pdf_rounded),
+              title: Text(state.t('export_title_pdf')),
+              subtitle: Text(state.t('export_format_pdf_hint')),
+              onTap: () => Navigator.of(ctx).pop(true),
+            ),
+            ListTile(
+              leading: const Icon(Icons.table_chart_rounded),
+              title: Text(state.t('export_title_excel')),
+              subtitle: Text(state.t('export_format_excel_hint')),
+              onTap: () => Navigator.of(ctx).pop(false),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
+    await _export(state, choice);
+  }
+
   Future<void> _export(AppState state, bool isPdf) async {
     if (_busy) return;
     if (!_hasData) {
-      showAppSnack(context, state.t('export_no_data'), isError: true);
+      await _showNoDataDialog(state);
       return;
     }
     setState(() => _busy = true);
@@ -282,28 +337,12 @@ class _ExportScreenState extends State<ExportScreen> {
                 ],
               ),
               const SizedBox(height: 20),
+              // SATU tombol ekspor (laporan user 2026-11-07): format PDF /
+              // Excel dipilih lewat dialog, bukan dua tombol terpisah.
               AppButton(
-                label: state.t('export_title_pdf'),
-                onPressed: _busy ? null : () => _export(state, true),
+                label: state.t('export_data'),
+                onPressed: _busy ? null : () => _pickFormatAndExport(state),
                 isLoading: _busy,
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: _busy ? null : () => _export(state, false),
-                icon: _busy
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.table_chart_rounded),
-                label: Text(state.t('export_title_excel')),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
               ),
               const SizedBox(height: 24),
               const Divider(),
